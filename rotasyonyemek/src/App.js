@@ -1,7 +1,6 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from './firebase';
+import { supabase } from './supabase';
 
 // Sayfalar
 import MagazaPaneli from './pages/MagazaPaneli';
@@ -153,10 +152,41 @@ function App() {
   };
 
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, "sistem", "ayarlar"), (doc) => {
-      if (doc.exists()) setSistemAyarlari(doc.data());
-    });
-    return () => unsub();
+    // İlk yükleme
+    const fetchAyarlar = async () => {
+      const { data } = await supabase
+        .from('sistem')
+        .select('*')
+        .eq('id', 'ayarlar')
+        .single();
+      
+      if (data) {
+        setSistemAyarlari({
+          bakimModu: data.bakim_modu,
+          duyuru: data.duyuru
+        });
+      }
+    };
+
+    fetchAyarlar();
+
+    // Realtime dinleme
+    const channel = supabase
+      .channel('sistem-changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'sistem' },
+        (payload) => {
+          setSistemAyarlari({
+            bakimModu: payload.new.bakim_modu,
+            duyuru: payload.new.duyuru
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   return (
