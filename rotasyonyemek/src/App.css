@@ -1,0 +1,385 @@
+/* =========================================
+   1. GLOBAL DEĞİŞKENLER & TASARIM SİSTEMİ
+   ========================================= */
+:root {
+  /* Ana Renk Paleti */
+  --ana-renk: #007bff;          /* Canlı Kurumsal Mavi */
+  --ana-renk-hover: #0056b3;    /* Buton hover durumu için koyu mavi */
+  
+  /* Arka Planlar */
+  --sayfa-arkaplan: #f4f7f6;    /* Göz yormayan soft gri-mavi */
+  --kart-arkaplan: #ffffff;     /* Saf Beyaz */
+  
+  /* Tipografi & Metin */
+  --yazi-koyu: #2d3436;         /* Okunaklı koyu gri (Siyah yerine) */
+  --yazi-gri: #636e72;          /* İkincil metinler için */
+  --yazi-beyaz: #ffffff;
+  
+  /* Modern UI Elementleri */
+  --golge-hafif: 0 4px 20px rgba(0, 0, 0, 0.05); /* Derinlik katan soft gölge */
+  --border-radius-std: 15px;    /* Standart yumuşak köşe */
+  --border-radius-sm: 10px;
+}
+
+/* Genel Sayfa Sıfırlama */
+body {
+  background-color: var(--sayfa-arkaplan);
+  color: var(--yazi-koyu);
+  font-family: 'Poppins', sans-serif;
+  margin: 0;
+  padding: 0;
+  line-height: 1.6;
+}
+
+/* =========================================
+   2. PROFİL SAYFASI İSKELETİ
+   ========================================= */
+
+.profil-sayfasi-konteynir {
+  max-width: 1100px;
+  margin: 50px auto;
+  padding: 0 20px;
+}
+
+/* Üst Bilgi Kartı */
+.profil-ust-kart {
+  background: var(--kart-arkaplan);
+  padding: 30px;
+  border-radius: var(--border-radius-std);
+  margin-bottom: 30px;
+  display: flex;
+  align-items: center;
+  /* Eski border yerine modern gölge ve sol tarafta ince bir mavi çizgi */
+  box-shadow: var(--golge-hafif);
+  border-left: 5px solid var(--ana-renk);
+  border-bottom: none; /* Eski turuncu çizgiyi kaldırdık */
+}
+
+.buyuk-avatar {
+  width: 80px;
+  height: 80px;
+  background: linear-gradient(135deg, var(--ana-renk), #4dabf7); /* Hafif gradient */
+  color: var(--yazi-beyaz);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  font-weight: 600;
+  margin-right: 25px;
+  box-shadow: 0 4px 10px rgba(0, 123, 255, 0.3); /* Avatar parlaması */
+}
+
+.profil-ana-govde {
+  display: flex;
+  gap: 30px;
+  align-items: flex-start; /* İçerik uzadığında yan menü yukarıda kalsın */
+}
+
+/* =========================================
+   3. YAN MENÜ (SIDEBAR)
+   ========================================= */
+.profil-yan-nav {
+  width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: transparent; /* Arka planı kaldırdık, ferah görünüm */
+}
+
+.profil-yan-nav button {
+  background: var(--kart-arkaplan);
+  border: 1px solid transparent; /* Border geçişi için */
+  color: var(--yazi-gri);
+  padding: 16px 20px;
+  text-align: left;
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-weight: 500;
+  box-shadow: var(--golge-hafif);
+}
+
+.profil-yan-nav button:hover {
+  color: var(--ana-renk);
+  transform: translateX(5px); /* Hover'da hafif sağa kayma efekti */
+}
+
+.profil-yan-nav button.aktif {
+  background: var(--ana-renk);
+  color: var(--yazi-beyaz);
+  box-shadow: 0 4px 15px rgba(0, 123, 255, 0.4); /* Aktif buton parlaması */
+}
+
+/* =========================================
+   4. İÇERİK ALANI
+   ========================================= */
+.profil-icerik-penceresi {
+  flex: 1;
+  background: var(--kart-arkaplan);
+  padding: 40px;
+  border-radius: var(--border-radius-std);
+  min-height: 500px;
+  box-shadow: var(--golge-hafif);
+}
+
+/* =========================================
+   5. FORM ELEMANLARI (Girdiler & Butonlar)
+   ========================================= */
+.input-grubu-yeni {
+  margin-bottom: 25px;
+  display: flex;
+  flex-direction: column;
+}
+
+.input-grubu-yeni label {
+  margin-bottom: 10px;
+  color: var(--yazi-koyu);
+  font-weight: 500;
+  font-size: 0.95rem;
+}
+
+.input-grubu-yeni input {
+  padding: 15px;
+  background: #f8f9fa; /* Çok açık gri arka plan */
+  border: 1px solid #e9ecef;
+  border-radius: var(--border-radius-sm);
+  color: var(--yazi-koyu); /* Beyaz arka planda koyu yazı */
+  font-size: 1rem;
+  transition: all 0.3s;
+}
+
+.input-grubu-yeni input:focus {
+  outline: none;
+  border-color: var(--ana-renk);
+  background: #ffffff;
+  box-shadow: 0 0 0 4px rgba(0, 123, 255, 0.1); /* Focus halkası */
+}
+
+.ana-islem-butonu {
+  background: var(--ana-renk);
+  color: var(--yazi-beyaz);
+  border: none;
+  padding: 18px 30px;
+  border-radius: var(--border-radius-std);
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  width: 100%;
+  transition: 0.3s;
+  letter-spacing: 0.5px;
+  margin-top: 10px;
+}
+
+.ana-islem-butonu:hover {
+  background: var(--ana-renk-hover);
+  box-shadow: 0 8px 20px rgba(0, 123, 255, 0.3);
+  transform: translateY(-2px);
+}
+
+/* =========================================
+   6. ADRES KARTLARI
+   ========================================= */
+.modern-adres-kart {
+  background: #ffffff;
+  padding: 25px;
+  border-radius: var(--border-radius-std);
+  margin-top: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid #edf2f7; /* Çok ince sınır çizgisi */
+  transition: 0.3s;
+}
+
+.modern-adres-kart:hover {
+  border-color: var(--ana-renk);
+  box-shadow: var(--golge-hafif);
+}
+/* Profil.css */
+
+/* Genel Sayfa Düzeni */
+.profil-sayfasi-konteynir {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 40px 20px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #f8f9fa;
+  min-height: 100vh;
+}
+
+/* 1. Üst Kart (Avatar ve İsim) */
+.profil-ust-kart {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  background: white;
+  padding: 30px;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  margin-bottom: 30px;
+}
+
+.buyuk-avatar {
+  width: 80px;
+  height: 80px;
+  background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+  color: white;
+  font-size: 32px;
+  font-weight: bold;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 10px rgba(108, 92, 231, 0.3);
+}
+
+/* 2. Ana Gövde (Sidebar + İçerik) */
+.profil-ana-govde {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 30px;
+}
+
+/* Sol Menü (Sidebar) */
+.profil-yan-nav {
+  background: white;
+  border-radius: 16px;
+  padding: 15px;
+  height: fit-content;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+}
+
+.profil-yan-nav button {
+  width: 100%;
+  text-align: left;
+  padding: 15px 20px;
+  margin-bottom: 5px;
+  border: none;
+  background: transparent;
+  border-radius: 10px;
+  font-size: 15px;
+  color: #636e72;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 500;
+}
+
+.profil-yan-nav button:hover {
+  background-color: #f1f2f6;
+  color: #2d3436;
+}
+
+.profil-yan-nav button.aktif {
+  background-color: #eef2ff;
+  color: #4f46e5;
+  font-weight: 600;
+}
+
+/* Sağ İçerik Alanı */
+.profil-icerik-penceresi {
+  background: white;
+  padding: 30px;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  min-height: 400px;
+}
+
+/* Form Elemanları */
+.input-grubu-yeni {
+  margin-bottom: 20px;
+}
+
+.input-grubu-yeni label {
+  display: block;
+  font-size: 13px;
+  color: #636e72;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.input-grubu-yeni input {
+  width: 100%;
+  padding: 12px 15px;
+  border: 1px solid #dfe6e9;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: border-color 0.2s;
+  box-sizing: border-box; /* Padding taşmasını önler */
+}
+
+.input-grubu-yeni input:focus {
+  outline: none;
+  border-color: #6c5ce7;
+  box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.1);
+}
+
+.ana-islem-butonu {
+  background-color: #6c5ce7;
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  transition: background 0.2s;
+}
+
+.ana-islem-butonu:hover {
+  background-color: #5849be;
+}
+
+.ana-islem-butonu:disabled {
+  background-color: #b2bec3;
+  cursor: not-allowed;
+}
+
+/* Adres Kartları */
+.modern-adres-kart {
+  background: white;
+  border: 1px solid #dfe6e9;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 15px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.modern-adres-kart:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.05);
+  border-color: #a29bfe;
+}
+
+/* Animasyonlar */
+.fade-in-anim {
+  animation: fadeIn 0.4s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Mobil Uyumluluk */
+@media (max-width: 768px) {
+  .profil-ana-govde {
+    grid-template-columns: 1fr; /* Mobilde tek kolon */
+  }
+  
+  .profil-yan-nav {
+    display: flex;
+    overflow-x: auto; /* Yatay kaydırma */
+    padding: 10px;
+    gap: 10px;
+  }
+  
+  .profil-yan-nav button {
+    white-space: nowrap;
+    width: auto;
+    margin-bottom: 0;
+  }
+}
