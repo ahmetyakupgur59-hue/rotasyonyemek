@@ -1,29 +1,24 @@
 import React, { useState, useEffect, useContext, useRef, useCallback } from 'react';
-import { db, auth } from '../firebase';
-import { 
-  collection, 
-  query, 
-  where, 
-  onSnapshot, 
-  orderBy, 
-  updateDoc, 
-  doc, 
-  addDoc, 
-  serverTimestamp, 
+import {
+  onSnapshot,
+  onDocSnapshot,
+  updateDoc,
+  addDoc,
+  serverTimestamp,
   getDoc,
-  limit 
-} from 'firebase/firestore';
-import { onAuthStateChanged } from 'firebase/auth';
+  queryCollection,
+  onAuthStateChanged
+} from '../supabaseHelpers';
 import { ThemeContext } from '../App';
 import { useNavigate } from 'react-router-dom';
 
 // ✅ YENİ: İptal Sebepleri
 const IPTAL_SEBEPLERI = [
-    { id: 'yanlis_urun', label: 'Yanlış ürün seçtim' },
-    { id: 'yanlis_adres', label: 'Yanlış adres girdim' },
-    { id: 'vazgectim', label: 'Vazgeçtim' },
-    { id: 'baska_restoran', label: 'Başka restoran tercih edeceğim' },
-    { id: 'diger', label: 'Diğer' }
+  { id: 'yanlis_urun', label: 'Yanlış ürün seçtim' },
+  { id: 'yanlis_adres', label: 'Yanlış adres girdim' },
+  { id: 'vazgectim', label: 'Vazgeçtim' },
+  { id: 'baska_restoran', label: 'Başka restoran tercih edeceğim' },
+  { id: 'diger', label: 'Diğer' }
 ];
 
 function Siparislerim() {
@@ -32,37 +27,37 @@ function Siparislerim() {
   const [yukleniyor, setYukleniyor] = useState(true);
   const [hata, setHata] = useState(null);
   const [kullanici, setKullanici] = useState(null);
-  
+
   // Tab Sistemi: "aktif" | "gecmis" | "tumu"
   const [aktifTab, setAktifTab] = useState("tumu");
-  
+
   // Yorum Modal
   const [yorumModal, setYorumModal] = useState(null);
   const [puan, setPuan] = useState(5);
   const [yorum, setYorum] = useState("");
   const [yorumGonderiliyor, setYorumGonderiliyor] = useState(false);
-  
+
   // Sohbet Modal
   const [sohbetModal, setSohbetModal] = useState(null);
   const [chatMesajlari, setChatMesajlari] = useState([]);
   const [yeniMesaj, setYeniMesaj] = useState("");
   const [mesajGonderiliyor, setMesajGonderiliyor] = useState(false);
-  
+
   // ✅ YENİ: İptal Modal States
   const [iptalModal, setIptalModal] = useState(null);
   const [iptalSebebi, setIptalSebebi] = useState('');
   const [iptalYukleniyor, setIptalYukleniyor] = useState(false);
-  
+
   // 🆕 PUAN & STREAK İLERİ KODU
   const [kullaniciBilgileri, setKullaniciBilgileri] = useState({
-      puanBakiye: 0,
-      toplamKazanilanPuan: 0,
-      streakSayisi: 0
+    puanBakiye: 0,
+    toplamKazanilanPuan: 0,
+    streakSayisi: 0
   });
-  
+
   // Detay Modal (Yeni Özellik)
   const [detayModal, setDetayModal] = useState(null);
-  
+
   // İstatistikler
   const [istatistikler, setIstatistikler] = useState({
     toplamSiparis: 0,
@@ -79,72 +74,33 @@ function Siparislerim() {
   // Durum Sabitleri
   const AKTIF_DURUMLAR = ['Onay Bekliyor', 'Onaylandı', 'Hazırlanıyor', 'Yolda'];
   const TAMAMLANAN_DURUMLAR = ['Teslim Edildi', 'İptal Edildi'];
-    // ===== SİPARİŞLERİ GETİR =====
+  // ===== SİPARİŞLERİ GETİR =====
   useEffect(() => {
     msgRef.current = new Audio('/message.mp3');
     let unsubSiparisler = null;
 
-    const unsubAuth = onAuthStateChanged(auth, async (user) => {
+    const unsubAuth = onAuthStateChanged(async (user) => {
       if (user) {
         setKullanici(user);
         setHata(null);
-        
+
         try {
-          // Önce index olmadan deneyelim (sadece where ile)
-          const q = query(
-            collection(db, "siparisler"),
-            where("musteriId", "==", user.uid),
-            orderBy("tarih", "desc"),
-            limit(50) // Performans için limit
-          );
-          
-          unsubSiparisler = onSnapshot(q, 
-            (snapshot) => {
-              const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-              setSiparisler(data);
-              hesaplaIstatistikler(data);
-              setYukleniyor(false);
-              setHata(null);
-            },
-            (error) => {
-              console.error("Sipariş yükleme hatası:", error);
-              
-              // Index hatası kontrolü
-              if (error.code === 'failed-precondition' || error.message.includes('index')) {
-                setHata({
-                  tip: 'index',
-                  mesaj: 'Veritabanı indexi oluşturulması gerekiyor.',
-                  detay: error.message
-                });
-                
-                // Index olmadan basit sorgu dene
-                const basitQuery = query(
-                  collection(db, "siparisler"),
-                  where("musteriId", "==", user.uid)
-                );
-                
-                onSnapshot(basitQuery, (snap) => {
-                  const data = snap.docs
-                    .map(d => ({ id: d.id, ...d.data() }))
-                    .sort((a, b) => {
-                      const tarihA = a.tarih?.seconds || 0;
-                      const tarihB = b.tarih?.seconds || 0;
-                      return tarihB - tarihA;
-                    });
-                  setSiparisler(data);
-                  hesaplaIstatistikler(data);
-                  setYukleniyor(false);
-                });
-              } else {
-                setHata({
-                  tip: 'genel',
-                  mesaj: 'Siparişler yüklenirken bir hata oluştu.',
-                  detay: error.message
-                });
-                setYukleniyor(false);
-              }
-            }
-          );
+          // Supabase ile sipariş dinleme
+          unsubSiparisler = onSnapshot("siparisler", (snapshot) => {
+            const data = snapshot.docs
+              .filter(d => d.data().musteriId === user.id)
+              .map(d => ({ id: d.id, ...d.data() }))
+              .sort((a, b) => {
+                const tarihA = a.tarih?.seconds || 0;
+                const tarihB = b.tarih?.seconds || 0;
+                return tarihB - tarihA;
+              })
+              .slice(0, 50); // Performans için limit
+            setSiparisler(data);
+            hesaplaIstatistikler(data);
+            setYukleniyor(false);
+            setHata(null);
+          });
         } catch (err) {
           console.error("Query oluşturma hatası:", err);
           setHata({
@@ -169,20 +125,20 @@ function Siparislerim() {
 
   // 🆕 Kullanıcı puan bilgilerini dinle
   useEffect(() => {
-      if (!kullanici) return;
-      
-      const unsubUser = onSnapshot(doc(db, "kullanicilar", kullanici.uid), (snap) => {
-          if (snap.exists()) {
-              const data = snap.data();
-              setKullaniciBilgileri({
-                  puanBakiye: data.puanBakiye || 0,
-                  toplamKazanilanPuan: data.toplamKazanilanPuan || 0,
-                  streakSayisi: data.streakSayisi || 0
-              });
-          }
-      });
-      
-      return () => unsubUser();
+    if (!kullanici) return;
+
+    const unsubUser = onDocSnapshot("kullanicilar", kullanici.id, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setKullaniciBilgileri({
+          puanBakiye: data.puanBakiye || 0,
+          toplamKazanilanPuan: data.toplamKazanilanPuan || 0,
+          streakSayisi: data.streakSayisi || 0
+        });
+      }
+    });
+
+    return () => unsubUser();
   }, [kullanici]);
 
   // ===== İSTATİSTİKLERİ HESAPLA =====
@@ -199,7 +155,7 @@ function Siparislerim() {
 
     const teslimEdilen = data.filter(s => s.durum === 'Teslim Edildi');
     const toplamHarcama = teslimEdilen.reduce((acc, s) => acc + (s.toplamTutar || 0), 0);
-    
+
     // En çok sipariş verilen restoran
     const restoranSayilari = {};
     teslimEdilen.forEach(s => {
@@ -207,7 +163,7 @@ function Siparislerim() {
         restoranSayilari[s.restoranAd] = (restoranSayilari[s.restoranAd] || 0) + 1;
       }
     });
-    
+
     let enCok = null;
     let maxSayi = 0;
     Object.entries(restoranSayilari).forEach(([ad, sayi]) => {
@@ -232,31 +188,26 @@ function Siparislerim() {
       return;
     }
 
-    const unsubMsg = onSnapshot(
-      query(
-        collection(db, "siparisler", sohbetModal.id, "mesajlar"), 
-        orderBy("tarih", "asc")
-      ),
-      (snap) => {
-        const msgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setChatMesajlari(msgs);
-        
-        // Yeni mesaj geldiğinde ses çal ve scroll yap
-        if (msgs.length > 0 && msgs[msgs.length - 1].gonderen === "Restoran") {
-          msgRef.current?.play().catch(() => {});
-        }
-        
-        // Chat'i en alta scroll et
-        setTimeout(() => {
-          if (chatContainerRef.current) {
-            chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-          }
-        }, 100);
-      },
-      (error) => {
-        console.error("Mesaj yükleme hatası:", error);
+    // Supabase ile mesajları dinle - subcollection yerine ana tablo kullanılıyor
+    const unsubMsg = onSnapshot("siparis_mesajlari", (snap) => {
+      const msgs = snap.docs
+        .filter(d => d.data().siparisId === sohbetModal.id)
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => (a.tarih?.seconds || 0) - (b.tarih?.seconds || 0));
+      setChatMesajlari(msgs);
+
+      // Yeni mesaj geldiğinde ses çal ve scroll yap
+      if (msgs.length > 0 && msgs[msgs.length - 1].gonderen === "Restoran") {
+        msgRef.current?.play().catch(() => { });
       }
-    );
+
+      // Chat'i en alta scroll et
+      setTimeout(() => {
+        if (chatContainerRef.current) {
+          chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+        }
+      }, 100);
+    });
 
     return () => unsubMsg();
   }, [sohbetModal]);
@@ -277,16 +228,17 @@ function Siparislerim() {
     setYorumGonderiliyor(true);
 
     try {
-      await updateDoc(doc(db, "siparisler", yorumModal.id), {
+      await updateDoc("siparisler", yorumModal.id, {
         puan: puan,
         yorum: yorum,
         yorumYapildi: true,
         yorumTarihi: serverTimestamp()
       });
 
-      await addDoc(collection(db, "restoranlar", yorumModal.restoranId, "yorumlar"), {
-        kullaniciId: auth.currentUser.uid,
-        kullaniciAd: auth.currentUser.displayName || auth.currentUser.email?.split('@')[0] || 'Müşteri',
+      await addDoc("restoran_yorumlari", {
+        restoranId: yorumModal.restoranId,
+        kullaniciId: kullanici.id,
+        kullaniciAd: kullanici.user_metadata?.name || kullanici.email?.split('@')[0] || 'Müşteri',
         puan: puan,
         yorum: yorum,
         siparisId: yorumModal.id,
@@ -308,16 +260,17 @@ function Siparislerim() {
   const mesajGonder = async (e) => {
     e.preventDefault();
     if (!yeniMesaj.trim() || !sohbetModal || mesajGonderiliyor) return;
-    
+
     setMesajGonderiliyor(true);
     const mesajMetni = yeniMesaj.trim();
     setYeniMesaj(""); // Hemen temizle (UX için)
 
     try {
-      await addDoc(collection(db, "siparisler", sohbetModal.id, "mesajlar"), {
+      await addDoc("siparis_mesajlari", {
+        siparisId: sohbetModal.id,
         gonderen: "Müşteri",
-        gonderenUid: auth.currentUser?.uid,
-        gonderenEmail: auth.currentUser?.email,
+        gonderenUid: kullanici?.id,
+        gonderenEmail: kullanici?.email,
         mesaj: mesajMetni,
         tarih: serverTimestamp(),
         okundu: false
@@ -334,14 +287,13 @@ function Siparislerim() {
   // ===== SİPARİŞİ TEKRARLA =====
   const siparisiTekrarla = async (siparis) => {
     try {
-      const restoranRef = doc(db, "restoranlar", siparis.restoranId);
-      const restoranSnap = await getDoc(restoranRef);
-      
+      const restoranSnap = await getDoc("restoranlar", siparis.restoranId);
+
       if (!restoranSnap.exists()) {
         alert("Bu restoran artık mevcut değil!");
         return;
       }
-      
+
       const restoranData = restoranSnap.data();
       if (!restoranData.acikMi) {
         alert("Restoran şu an kapalı! Açılınca tekrar deneyebilirsiniz.");
@@ -360,7 +312,7 @@ function Siparislerim() {
 
       localStorage.setItem(sepetKey, JSON.stringify(yeniSepet));
       navigate(`/restoran/${siparis.restoranId}`);
-      
+
     } catch (error) {
       console.error("Sipariş tekrarlama hatası:", error);
       alert("Bir hata oluştu: " + error.message);
@@ -370,32 +322,32 @@ function Siparislerim() {
   // ===== HELPER FONKSİYONLAR =====
   const sohbetAktifMi = (durum) => !TAMAMLANAN_DURUMLAR.includes(durum);
   const yorumYapilabilirMi = (siparis) => siparis.durum === "Teslim Edildi" && !siparis.yorumYapildi && !siparis.puan;
-  
+
   // ✅ YENİ: İptal kontrol fonksiyonları
   const iptalEdilabilirMi = (siparis) => {
     // Sadece "Onay Bekliyor" durumunda iptal edilebilir
     if (siparis.durum !== "Onay Bekliyor") return false;
-    
+
     // Sipariş verildikten sonra 5 dakika içinde
     if (!siparis.tarih?.seconds) return true; // Tarih yoksa izin ver
-    
+
     const siparisZamani = siparis.tarih.seconds * 1000;
     const simdi = Date.now();
     const farkDakika = (simdi - siparisZamani) / (1000 * 60);
-    
+
     return farkDakika <= 5; // 5 dakika içindeyse true
   };
 
   const kalanIptalSuresi = (siparis) => {
     if (!siparis.tarih?.seconds) return null;
-    
+
     const siparisZamani = siparis.tarih.seconds * 1000;
     const simdi = Date.now();
     const farkSaniye = Math.floor((simdi - siparisZamani) / 1000);
     const kalanSaniye = 300 - farkSaniye; // 5 dakika = 300 saniye
-    
+
     if (kalanSaniye <= 0) return null;
-    
+
     const dakika = Math.floor(kalanSaniye / 60);
     const saniye = kalanSaniye % 60;
     return `${dakika}:${saniye.toString().padStart(2, '0')}`;
@@ -404,27 +356,27 @@ function Siparislerim() {
   // ✅ YENİ: Sipariş iptal fonksiyonu
   const siparisiIptalEt = async () => {
     if (!iptalModal || !iptalSebebi || iptalYukleniyor) return;
-    
+
     setIptalYukleniyor(true);
-    
+
     try {
-        await updateDoc(doc(db, "siparisler", iptalModal.id), {
-            durum: "İptal Edildi",
-            iptalSebebi: IPTAL_SEBEPLERI.find(s => s.id === iptalSebebi)?.label || iptalSebebi,
-            iptalEden: "Müşteri",
-            iptalTarihi: serverTimestamp()
-        });
-        
-        setIptalModal(null);
-        setIptalSebebi('');
+      await updateDoc("siparisler", iptalModal.id, {
+        durum: "İptal Edildi",
+        iptalSebebi: IPTAL_SEBEPLERI.find(s => s.id === iptalSebebi)?.label || iptalSebebi,
+        iptalEden: "Müşteri",
+        iptalTarihi: serverTimestamp()
+      });
+
+      setIptalModal(null);
+      setIptalSebebi('');
     } catch (error) {
-        console.error("İptal hatası:", error);
-        alert("Sipariş iptal edilemedi: " + error.message);
+      console.error("İptal hatası:", error);
+      alert("Sipariş iptal edilemedi: " + error.message);
     } finally {
-        setIptalYukleniyor(false);
+      setIptalYukleniyor(false);
     }
   };
-  
+
   const getDurumRengi = (durum) => {
     const renkler = {
       'Onay Bekliyor': '#f59e0b',
@@ -455,24 +407,24 @@ function Siparislerim() {
     const simdi = new Date();
     const fark = simdi - date;
     const birGun = 24 * 60 * 60 * 1000;
-    
+
     if (fark < birGun && date.getDate() === simdi.getDate()) {
       return `Bugün ${date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`;
     } else if (fark < 2 * birGun) {
       return `Dün ${date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`;
     }
-    return date.toLocaleDateString('tr-TR', { 
-      day: 'numeric', 
+    return date.toLocaleDateString('tr-TR', {
+      day: 'numeric',
       month: 'short',
-      hour: '2-digit', 
-      minute: '2-digit' 
+      hour: '2-digit',
+      minute: '2-digit'
     });
   };
-    // ===== GİRİŞ YAPILMAMIŞ =====
+  // ===== GİRİŞ YAPILMAMIŞ =====
   if (!yukleniyor && !kullanici) {
     return (
-      <div style={{ 
-        padding: '60px 20px', 
+      <div style={{
+        padding: '60px 20px',
         textAlign: 'center',
         maxWidth: '400px',
         margin: '0 auto'
@@ -506,16 +458,16 @@ function Siparislerim() {
   // ===== YÜKLENİYOR =====
   if (yukleniyor) {
     return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        minHeight: '60vh' 
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '60vh'
       }}>
         <div style={{ textAlign: 'center', color: 'var(--text-sub)' }}>
-          <div style={{ 
-            width: '50px', 
-            height: '50px', 
+          <div style={{
+            width: '50px',
+            height: '50px',
             border: '4px solid var(--border-color)',
             borderTopColor: 'var(--primary)',
             borderRadius: '50%',
@@ -558,7 +510,7 @@ function Siparislerim() {
   // ===== ANA SAYFA =====
   return (
     <div style={{ padding: '20px', maxWidth: '900px', margin: '0 auto' }}>
-      
+
       {/* ===== HEADER ===== */}
       <div style={{ marginBottom: '25px' }}>
         <h2 style={{ color: 'var(--text-main)', margin: '0 0 5px 0', fontSize: '24px' }}>
@@ -571,28 +523,28 @@ function Siparislerim() {
 
       {/* ===== İSTATİSTİK KARTLARI ===== */}
       {siparisler.length > 0 && (
-        <div style={{ 
-          display: 'grid', 
+        <div style={{
+          display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
           gap: '12px',
           marginBottom: '25px'
         }}>
           {/* 🆕 Puan Kartı */}
           <div style={{
-              background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
-              borderRadius: '12px',
-              padding: '16px',
-              textAlign: 'center',
-              color: 'white'
+            background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+            borderRadius: '12px',
+            padding: '16px',
+            textAlign: 'center',
+            color: 'white'
           }}>
-              <div style={{ fontSize: '24px', fontWeight: 'bold' }}>
-                  🎯 {kullaniciBilgileri.puanBakiye.toLocaleString()}
-              </div>
-              <div style={{ fontSize: '12px', opacity: 0.9, marginTop: '4px' }}>
-                  Puan Bakiyesi
-              </div>
+            <div style={{ fontSize: '24px', fontWeight: 'bold' }}>
+              🎯 {kullaniciBilgileri.puanBakiye.toLocaleString()}
+            </div>
+            <div style={{ fontSize: '12px', opacity: 0.9, marginTop: '4px' }}>
+              Puan Bakiyesi
+            </div>
           </div>
-          
+
           <div style={{
             background: 'var(--card-bg)',
             border: '1px solid var(--border-color)',
@@ -607,7 +559,7 @@ function Siparislerim() {
               Toplam Sipariş
             </div>
           </div>
-          
+
           <div style={{
             background: 'var(--card-bg)',
             border: '1px solid var(--border-color)',
@@ -622,7 +574,7 @@ function Siparislerim() {
               Toplam Harcama
             </div>
           </div>
-          
+
           <div style={{
             background: 'var(--card-bg)',
             border: '1px solid var(--border-color)',
@@ -637,7 +589,7 @@ function Siparislerim() {
               Ortalama Sipariş
             </div>
           </div>
-          
+
           {istatistikler.enCokSiparis && (
             <div style={{
               background: 'var(--card-bg)',
@@ -647,8 +599,8 @@ function Siparislerim() {
               textAlign: 'center'
             }}>
               <div style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--text-main)' }}>
-                ❤️ {istatistikler.enCokSiparis.ad.length > 12 
-                  ? istatistikler.enCokSiparis.ad.slice(0, 12) + '...' 
+                ❤️ {istatistikler.enCokSiparis.ad.length > 12
+                  ? istatistikler.enCokSiparis.ad.slice(0, 12) + '...'
                   : istatistikler.enCokSiparis.ad}
               </div>
               <div style={{ fontSize: '12px', color: 'var(--text-sub)', marginTop: '4px' }}>
@@ -656,31 +608,31 @@ function Siparislerim() {
               </div>
             </div>
           )}
-          
+
           {/* 🆕 Streak Kartı */}
           {kullaniciBilgileri.streakSayisi > 0 && (
-              <div style={{
-                  background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-                  borderRadius: '12px',
-                  padding: '16px',
-                  textAlign: 'center',
-                  color: 'white'
-              }}>
-                  <div style={{ fontSize: '24px', fontWeight: 'bold' }}>
-                      🔥 {kullaniciBilgileri.streakSayisi}
-                  </div>
-                  <div style={{ fontSize: '12px', opacity: 0.9, marginTop: '4px' }}>
-                      Sipariş Serisi
-                  </div>
+            <div style={{
+              background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+              borderRadius: '12px',
+              padding: '16px',
+              textAlign: 'center',
+              color: 'white'
+            }}>
+              <div style={{ fontSize: '24px', fontWeight: 'bold' }}>
+                🔥 {kullaniciBilgileri.streakSayisi}
               </div>
+              <div style={{ fontSize: '12px', opacity: 0.9, marginTop: '4px' }}>
+                Sipariş Serisi
+              </div>
+            </div>
           )}
         </div>
       )}
 
       {/* ===== TAB MENÜ ===== */}
-      <div style={{ 
-        display: 'flex', 
-        gap: '8px', 
+      <div style={{
+        display: 'flex',
+        gap: '8px',
         marginBottom: '20px',
         background: 'var(--bg-body)',
         padding: '6px',
@@ -729,9 +681,9 @@ function Siparislerim() {
 
       {/* ===== BOŞ DURUM ===== */}
       {filtrelenmis.length === 0 && (
-        <div style={{ 
-          textAlign: 'center', 
-          padding: '60px 20px', 
+        <div style={{
+          textAlign: 'center',
+          padding: '60px 20px',
           color: 'var(--text-sub)',
           background: 'var(--card-bg)',
           borderRadius: '16px',
@@ -741,9 +693,9 @@ function Siparislerim() {
             {aktifTab === 'aktif' ? '🚀' : aktifTab === 'gecmis' ? '📋' : '📦'}
           </div>
           <p style={{ fontSize: '16px', margin: '0 0 8px 0', color: 'var(--text-main)' }}>
-            {aktifTab === 'aktif' 
-              ? 'Aktif siparişiniz yok' 
-              : aktifTab === 'gecmis' 
+            {aktifTab === 'aktif'
+              ? 'Aktif siparişiniz yok'
+              : aktifTab === 'gecmis'
                 ? 'Henüz tamamlanmış sipariş yok'
                 : 'Henüz siparişiniz bulunmuyor'}
           </p>
@@ -751,7 +703,7 @@ function Siparislerim() {
             {aktifTab === 'tumu' && 'Hadi lezzetli bir şeyler sipariş edelim!'}
           </p>
           {aktifTab === 'tumu' && (
-            <button 
+            <button
               onClick={() => navigate('/')}
               style={{
                 marginTop: '20px',
@@ -778,8 +730,8 @@ function Siparislerim() {
             key={s.id}
             style={{
               background: 'var(--card-bg)',
-              border: AKTIF_DURUMLAR.includes(s.durum) 
-                ? `2px solid ${getDurumRengi(s.durum)}` 
+              border: AKTIF_DURUMLAR.includes(s.durum)
+                ? `2px solid ${getDurumRengi(s.durum)}`
                 : '1px solid var(--border-color)',
               padding: '20px',
               borderRadius: '16px',
@@ -809,19 +761,19 @@ function Siparislerim() {
             `}</style>
 
             {/* Header */}
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              alignItems: 'flex-start', 
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'flex-start',
               marginBottom: '15px',
               flexWrap: 'wrap',
               gap: '10px'
             }}>
               <div style={{ flex: 1, minWidth: '200px' }}>
-                <h3 
-                  style={{ 
-                    margin: 0, 
-                    color: 'var(--text-main)', 
+                <h3
+                  style={{
+                    margin: 0,
+                    color: 'var(--text-main)',
                     fontSize: '18px',
                     cursor: 'pointer'
                   }}
@@ -836,7 +788,7 @@ function Siparislerim() {
                   🔖 #{s.id.slice(-6).toUpperCase()}
                 </div>
               </div>
-              
+
               <div style={{
                 background: getDurumRengi(s.durum),
                 color: 'white',
@@ -890,12 +842,12 @@ function Siparislerim() {
                   <span style={{ fontWeight: 'bold' }}>{(y.fiyat * y.adet)} ₺</span>
                 </div>
               ))}
-              
+
               {s.yemekler?.length > 3 && (
-                <div 
-                  style={{ 
-                    fontSize: '13px', 
-                    color: 'var(--primary)', 
+                <div
+                  style={{
+                    fontSize: '13px',
+                    color: 'var(--primary)',
                     cursor: 'pointer',
                     textAlign: 'center',
                     paddingTop: '8px',
@@ -940,37 +892,37 @@ function Siparislerim() {
 
               {/* 🆕 Kazanılan Puan */}
               {s.durum === 'Teslim Edildi' && s.kazanilacakPuan > 0 && (
-                  <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      marginTop: '10px',
-                      paddingTop: '10px',
-                      borderTop: '1px dashed var(--border-color)',
-                      color: '#8b5cf6',
-                      fontSize: '13px'
-                  }}>
-                      <span>🎁 Kazanılan Puan</span>
-                      <span style={{ fontWeight: 'bold' }}>+{s.kazanilacakPuan}</span>
-                  </div>
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  marginTop: '10px',
+                  paddingTop: '10px',
+                  borderTop: '1px dashed var(--border-color)',
+                  color: '#8b5cf6',
+                  fontSize: '13px'
+                }}>
+                  <span>🎁 Kazanılan Puan</span>
+                  <span style={{ fontWeight: 'bold' }}>+{s.kazanilacakPuan}</span>
+                </div>
               )}
 
               {/* 🆕 Kullanılan Puan/Kupon */}
               {(s.kullanilanPuan > 0 || s.kuponKodu) && (
-                  <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text-sub)' }}>
-                      {s.kullanilanPuan > 0 && (
-                          <span style={{ marginRight: '15px' }}>🎯 -{s.puanIndirimi}₺ (puan)</span>
-                      )}
-                      {s.kuponKodu && (
-                          <span>🎫 {s.kuponKodu}</span>
-                      )}
-                  </div>
+                <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text-sub)' }}>
+                  {s.kullanilanPuan > 0 && (
+                    <span style={{ marginRight: '15px' }}>🎯 -{s.puanIndirimi}₺ (puan)</span>
+                  )}
+                  {s.kuponKodu && (
+                    <span>🎫 {s.kuponKodu}</span>
+                  )}
+                </div>
               )}
             </div>
 
             {/* Adres & Ödeme */}
-            <div style={{ 
-              fontSize: '13px', 
-              color: 'var(--text-sub)', 
+            <div style={{
+              fontSize: '13px',
+              color: 'var(--text-sub)',
               marginBottom: '15px',
               display: 'flex',
               flexDirection: 'column',
@@ -1128,7 +1080,7 @@ function Siparislerim() {
                   justifyContent: 'center',
                   gap: '4px'
                 }}>
-                  {'⭐'.repeat(s.puan)} 
+                  {'⭐'.repeat(s.puan)}
                   <span style={{ color: '#22c55e', fontWeight: '500' }}>Değerlendirildi</span>
                 </div>
               )}
@@ -1150,9 +1102,9 @@ function Siparislerim() {
           padding: '20px',
           backdropFilter: 'blur(4px)'
         }}
-        onClick={() => setDetayModal(null)}
+          onClick={() => setDetayModal(null)}
         >
-          <div 
+          <div
             style={{
               background: 'var(--card-bg)',
               borderRadius: '20px',
@@ -1181,7 +1133,7 @@ function Siparislerim() {
                 ✕
               </button>
             </div>
-            
+
             {detayModal.yemekler?.map((y, i) => (
               <div key={i} style={{
                 padding: '12px',
@@ -1206,7 +1158,7 @@ function Siparislerim() {
                 </div>
               </div>
             ))}
-            
+
             <div style={{
               borderTop: '2px solid var(--border-color)',
               marginTop: '15px',
@@ -1296,7 +1248,7 @@ function Siparislerim() {
             </div>
 
             {/* Mesajlar */}
-            <div 
+            <div
               ref={chatContainerRef}
               style={{
                 flex: 1,
@@ -1549,7 +1501,7 @@ function Siparislerim() {
               }}>
                 <span style={{ fontSize: '20px' }}>⚠️</span>
                 <div style={{ fontSize: '13px', color: 'var(--text-main)', lineHeight: '1.5' }}>
-                  <strong>Dikkat:</strong> İptal işlemi geri alınamaz. 
+                  <strong>Dikkat:</strong> İptal işlemi geri alınamaz.
                   İptal sonrası aynı siparişi tekrar verebilirsiniz.
                 </div>
               </div>
@@ -1609,7 +1561,7 @@ function Siparislerim() {
                         onChange={() => setIptalSebebi(sebep.id)}
                         style={{ accentColor: '#ef4444' }}
                       />
-                      <span style={{ 
+                      <span style={{
                         color: iptalSebebi === sebep.id ? '#ef4444' : 'var(--text-main)',
                         fontSize: '14px'
                       }}>

@@ -1,8 +1,14 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { db, auth } from '../firebase';
-import { collection, onSnapshot, doc, getDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import {
+    onSnapshot,
+    onDocSnapshot,
+    getDoc,
+    updateDoc,
+    onAuthStateChanged,
+    arrayUnion,
+    arrayRemove
+} from '../supabaseHelpers';
 import { Link, useNavigate } from 'react-router-dom';
-import { onAuthStateChanged } from 'firebase/auth';
 import { ThemeContext } from '../App';
 
 // --- CSS STİLLERİ ---
@@ -496,10 +502,10 @@ function AnaSayfa() {
 
     // --- VERİ ÇEKME ---
     useEffect(() => {
-        const unsubAuth = onAuthStateChanged(auth, async (u) => {
+        const unsubAuth = onAuthStateChanged(async (u) => {
             setUser(u);
             if (u) {
-                const userSnap = await getDoc(doc(db, "kullanicilar", u.uid));
+                const userSnap = await getDoc("kullanicilar", u.id);
                 if (userSnap.exists()) {
                     const data = userSnap.data();
                     if (data.rol === 'superadmin') setIsAdmin(true);
@@ -520,7 +526,7 @@ function AnaSayfa() {
         });
 
         // Restoranları dinle
-        const unsubRestoran = onSnapshot(collection(db, "restoranlar"), (s) => {
+        const unsubRestoran = onSnapshot("restoranlar", (s) => {
             const liste = s.docs.map(d => ({ id: d.id, ...d.data() }));
             setRestoranlar(liste);
 
@@ -544,8 +550,7 @@ function AnaSayfa() {
         });
 
         // === MERKEZİ BÖLGELERİ DİNLE (DÜZELTİLDİ: 'turkiye' dosyası) ===
-        // collection yerine doc kullandık
-        const unsubBolgeler = onSnapshot(doc(db, "bolgeler", "turkiye"), (docSnap) => {
+        const unsubBolgeler = onDocSnapshot("bolgeler", "turkiye", (docSnap) => {
             if (docSnap.exists()) {
                 setMerkeziBolgeler(docSnap.data());
             } else {
@@ -742,9 +747,7 @@ function AnaSayfa() {
                 olusturmaTarihi: new Date().toISOString()
             };
 
-            await updateDoc(doc(db, "kullanicilar", user.uid), {
-                adresler: arrayUnion(yeniAdres)
-            });
+            await arrayUnion("kullanicilar", user.id, "adresler", yeniAdres);
 
             const yeniListe = [...adresler, yeniAdres];
             setAdresler(yeniListe);
@@ -770,9 +773,7 @@ function AnaSayfa() {
         try {
             const silinecek = adresler.find(a => a.id === adresId);
 
-            await updateDoc(doc(db, "kullanicilar", user.uid), {
-                adresler: arrayRemove(silinecek)
-            });
+            await arrayRemove("kullanicilar", user.id, "adresler", silinecek);
 
             const yeniListe = adresler.filter(a => a.id !== adresId);
             setAdresler(yeniListe);
@@ -796,12 +797,11 @@ function AnaSayfa() {
         e.preventDefault();
         if (!user) return navigate('/login');
 
-        const userRef = doc(db, "kullanicilar", user.uid);
         if (favoriler.includes(resId)) {
-            await updateDoc(userRef, { favoriRestoranlar: arrayRemove(resId) });
+            await arrayRemove("kullanicilar", user.id, "favoriRestoranlar", resId);
             setFavoriler(prev => prev.filter(id => id !== resId));
         } else {
-            await updateDoc(userRef, { favoriRestoranlar: arrayUnion(resId) });
+            await arrayUnion("kullanicilar", user.id, "favoriRestoranlar", resId);
             setFavoriler(prev => [...prev, resId]);
         }
     };
@@ -1073,7 +1073,7 @@ function AnaSayfa() {
                                     <div onClick={() => navigate('/profil')} className="dropdown-item">👤 Hesabım</div>
                                     <div onClick={() => navigate('/siparislerim')} className="dropdown-item">📦 Siparişlerim</div>
                                     <div style={{ borderTop: '1px solid var(--border-color)', margin: '5px 0' }}></div>
-                                    <div onClick={() => auth.signOut()} className="dropdown-item" style={{ color: '#ef4444' }}>🚪 Çıkış Yap</div>
+                                    <div onClick={() => signOut()} className="dropdown-item" style={{ color: '#ef4444' }}>🚪 Çıkış Yap</div>
                                 </div>
                             )}
                         </div>

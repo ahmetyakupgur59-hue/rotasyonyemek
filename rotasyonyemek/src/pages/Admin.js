@@ -1,12 +1,22 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { db, auth, secondaryAuth } from '../firebase';
 import {
-    collection, addDoc, onSnapshot, deleteDoc, updateDoc, doc,
-    query, orderBy, getDoc, writeBatch, where, getDocs, serverTimestamp,
-    setDoc, arrayUnion // 🆕 arrayUnion eklendi
-} from 'firebase/firestore';
+    onSnapshot,
+    onDocSnapshot,
+    getDoc,
+    updateDoc,
+    deleteDoc,
+    addDoc,
+    setDoc,
+    serverTimestamp,
+    arrayUnion,
+    queryCollection,
+    onAuthStateChanged,
+    signOut,
+    supabase,
+    getDocs,
+    batchOperations // YENİ: Batch işlemleri için
+} from '../supabaseHelpers';
 import { useNavigate } from 'react-router-dom';
-import { createUserWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
 
 // --- YARDIMCI FONKSİYONLAR ---
 const trKarakterCevir = (metin) => {
@@ -176,7 +186,7 @@ function Admin() {
     // 1. VERİ ÇEKME VE YETKİ KONTROLÜ
     // ============================================================
     useEffect(() => {
-        const unsubAuth = onAuthStateChanged(auth, async (currentUser) => {
+        const unsubAuth = onAuthStateChanged(async (currentUser) => {
             if (!currentUser) {
                 setYukleniyor(false);
                 navigate("/login");
@@ -185,8 +195,7 @@ function Admin() {
 
             try {
                 // Yetki kontrolü
-                const userRef = doc(db, "kullanicilar", currentUser.uid);
-                const userSnap = await getDoc(userRef);
+                const userSnap = await getDoc("kullanicilar", currentUser.id);
 
                 if (!userSnap.exists() || userSnap.data().rol !== "superadmin") {
                     alert("⛔ Bu alana sadece Yöneticiler girebilir!");
@@ -194,70 +203,68 @@ function Admin() {
                     return;
                 }
 
-                setAdminBilgi({ uid: currentUser.uid, email: currentUser.email, ...userSnap.data() });
+                setAdminBilgi({ uid: currentUser.id, email: currentUser.email, ...userSnap.data() });
 
                 // a) Restoranları dinle
-                const unsubRes = onSnapshot(collection(db, "restoranlar"), (snapshot) => {
+                const unsubRes = onSnapshot("restoranlar", (snapshot) => {
                     setRestoranlar(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
                 });
 
                 // b) Kullanıcıları dinle
-                const unsubUser = onSnapshot(collection(db, "kullanicilar"), (snapshot) => {
+                const unsubUser = onSnapshot("kullanicilar", (snapshot) => {
                     setKullanicilar(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
                 });
 
                 // c) Siparişleri dinle
-                const unsubOrder = onSnapshot(
-                    query(collection(db, "siparisler"), orderBy("tarih", "desc")),
-                    (snapshot) => {
-                        setTumSiparisler(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
-                        setYukleniyor(false);
-                    }
-                );
+                const unsubOrder = onSnapshot("siparisler", (snapshot) => {
+                    const sorted = snapshot.docs
+                        .map(d => ({ id: d.id, ...d.data() }))
+                        .sort((a, b) => (b.tarih?.seconds || 0) - (a.tarih?.seconds || 0));
+                    setTumSiparisler(sorted);
+                    setYukleniyor(false);
+                });
 
                 // d) Destek taleplerini dinle
-                const unsubDestek = onSnapshot(
-                    query(collection(db, "destek_talepleri"), orderBy("tarih", "desc")),
-                    (snapshot) => {
-                        setDestekTalepleri(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
-                    }
-                );
+                const unsubDestek = onSnapshot("destek_talepleri", (snapshot) => {
+                    const sorted = snapshot.docs
+                        .map(d => ({ id: d.id, ...d.data() }))
+                        .sort((a, b) => (b.tarih?.seconds || 0) - (a.tarih?.seconds || 0));
+                    setDestekTalepleri(sorted);
+                });
 
                 // e) Platform ayarlarını çek
-                const ayarlarSnap = await getDoc(doc(db, "sistem", "ayarlar"));
+                const ayarlarSnap = await getDoc("sistem", "ayarlar");
                 if (ayarlarSnap.exists()) {
                     setPlatformAyarlari(prev => ({ ...prev, ...ayarlarSnap.data() }));
                 }
 
                 // f) Ödeme geçmişini dinle
-                const unsubOdeme = onSnapshot(
-                    query(collection(db, "odemeler"), orderBy("tarih", "desc")),
-                    (snapshot) => {
-                        setOdemeGecmisi(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
-                    }
-                );
+                const unsubOdeme = onSnapshot("odemeler", (snapshot) => {
+                    const sorted = snapshot.docs
+                        .map(d => ({ id: d.id, ...d.data() }))
+                        .sort((a, b) => (b.tarih?.seconds || 0) - (a.tarih?.seconds || 0));
+                    setOdemeGecmisi(sorted);
+                });
 
                 // g) Bölgeleri dinle
-                const unsubBolgeler = onSnapshot(doc(db, "bolgeler", "turkiye"), (snapshot) => {
+                const unsubBolgeler = onDocSnapshot("bolgeler", "turkiye", (snapshot) => {
                     if (snapshot.exists()) {
                         setBolgeler(snapshot.data());
                     } else {
                         setBolgeler({});
                     }
-                }, (error) => {
-                    console.error("Bölgeler yüklenemedi:", error);
-                    setBolgeler({});
                 });
 
-                // h) Kuponları dinle (useEffect içine ekle)
-                const unsubKuponlar = onSnapshot(
-                    query(collection(db, "kuponlar"), orderBy("olusturulmaTarihi", "desc")),
-                    (snapshot) => {
-                        setKuponlar(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
-                    }
-                );
+                // h) Kuponları dinle
+                const unsubKuponlar = onSnapshot("kuponlar", (snapshot) => {
+                    const sorted = snapshot.docs
+                        .map(d => ({ id: d.id, ...d.data() }))
+                        .sort((a, b) => (b.olusturulmaTarihi?.seconds || 0) - (a.olusturulmaTarihi?.seconds || 0));
+                    setKuponlar(sorted);
+                });
 
                 return () => {
+
                     unsubRes();
                     unsubUser();
                     unsubOrder();
@@ -440,32 +447,17 @@ function Admin() {
     // ============================================================
 
     // --- RESTORAN İŞLEMLERİ ---
+    // --- RESTORAN İŞLEMLERİ ---
     const restoranEkle = async (e) => {
         e.preventDefault();
 
         try {
-            // ÖNEMLİ: secondaryAuth kullanarak yeni kullanıcı oluştur
-            // Bu sayede admin oturumu bozulmaz!
-            const userCredential = await createUserWithEmailAndPassword(
-                secondaryAuth,
-                yeniRes.email,
-                yeniRes.sifre
-            );
-
-            const yeniKullaniciUid = userCredential.user.uid;
-
-            // Kullanıcı dökümanını oluştur (updateDoc değil setDoc!)
-            await setDoc(doc(db, "kullanicilar", yeniKullaniciUid), {
-                uid: yeniKullaniciUid,
-                rol: "restoran",
-                email: yeniRes.email.toLowerCase().trim(),
-                adSoyad: yeniRes.isim,
-                olusturulmaTarihi: serverTimestamp(),
-                banliMi: false
-            });
+            // ÖNEMLİ: Supabase'de client-side olarak başka bir kullanıcı oluşturmak 
+            // mevcut oturumu kapatır. Bu yüzden burada sadece restoran kaydı oluşturuyoruz.
+            // Restoran sahibi bu email ile giriş yaptığında/kaydolduğunda eşleşme sağlanacaktır.
 
             // Restoran dökümanı oluştur
-            await addDoc(collection(db, "restoranlar"), {
+            await addDoc("restoranlar", {
                 isim: yeniRes.isim,
                 kategori: yeniRes.kategori,
                 resim: yeniRes.resim || "https://via.placeholder.com/100",
@@ -474,7 +466,7 @@ function Admin() {
                 adres: yeniRes.adres,
                 puan: 0,
                 sahipEmail: yeniRes.email.toLowerCase().trim(),
-                sahipUid: yeniKullaniciUid,
+                sahipUid: null, // Kullanıcı daha sonra giriş yapınca güncellenebilir veya email yeterli
                 durum: true,
                 acikMi: true,
                 yogunluk: "Normal",
@@ -487,10 +479,7 @@ function Admin() {
                 onay: false
             });
 
-            // Secondary auth'tan çıkış yap (opsiyonel ama önerilir)
-            await signOut(secondaryAuth);
-
-            alert("✅ Restoran başarıyla eklendi!");
+            alert("✅ Restoran başarıyla eklendi! (Kullanıcı kaydı oluşturulmadı, restoran sahibi bu email ile kendisi kaydolmalı)");
             setModalAcik(false);
             setYeniRes({
                 isim: "",
@@ -505,24 +494,13 @@ function Admin() {
 
         } catch (err) {
             console.error("Restoran ekleme hatası:", err);
-
-            let hataMesaji = "Bir hata oluştu: " + err.message;
-
-            if (err.code === "auth/email-already-in-use") {
-                hataMesaji = "Bu email adresi zaten kullanımda!";
-            } else if (err.code === "auth/weak-password") {
-                hataMesaji = "Şifre en az 6 karakter olmalıdır!";
-            } else if (err.code === "auth/invalid-email") {
-                hataMesaji = "Geçersiz email formatı!";
-            }
-
-            alert("❌ " + hataMesaji);
+            alert("❌ Bir hata oluştu: " + err.message);
         }
     };
 
     const restoranGuncelle = async (restoranId, guncellemeler) => {
         try {
-            await updateDoc(doc(db, "restoranlar", restoranId), guncellemeler);
+            await updateDoc("restoranlar", restoranId, guncellemeler);
             alert("✅ Güncellendi!");
         } catch (err) {
             alert("Hata: " + err.message);
@@ -534,14 +512,24 @@ function Admin() {
 
         try {
             // İlgili yemekleri sil
-            const yemeklerQuery = query(collection(db, "yemekler"), where("restoranId", "==", restoranId));
-            const yemeklerSnap = await getDocs(yemeklerQuery);
-            const batch = writeBatch(db);
-            yemeklerSnap.docs.forEach(doc => batch.delete(doc.ref));
+            const yemeklerSnap = await getDocs(
+                queryCollection("yemekler", [{ field: "restoranId", operator: "==", value: restoranId }])
+            );
 
-            // Restoranı sil
-            batch.delete(doc(db, "restoranlar", restoranId));
-            await batch.commit();
+            const operations = yemeklerSnap.docs.map(doc => ({
+                type: 'delete',
+                collection: 'yemekler',
+                id: doc.id
+            }));
+
+            // Restoranı da silme listesine ekle
+            operations.push({
+                type: 'delete',
+                collection: 'restoranlar',
+                id: restoranId
+            });
+
+            await batchOperations(operations);
 
             setSeciliRestoran(null);
             alert("🗑️ Restoran silindi!");
@@ -553,7 +541,7 @@ function Admin() {
     // --- SİPARİŞ İŞLEMLERİ ---
     const siparisDurumGuncelle = async (siparisId, yeniDurum) => {
         try {
-            await updateDoc(doc(db, "siparisler", siparisId), {
+            await updateDoc("siparisler", siparisId, {
                 durum: yeniDurum,
                 sonGuncelleme: serverTimestamp()
             });
@@ -568,7 +556,7 @@ function Admin() {
         if (!sebep) return;
 
         try {
-            await updateDoc(doc(db, "siparisler", siparisId), {
+            await updateDoc("siparisler", siparisId, {
                 durum: "İptal Edildi",
                 iptalSebebi: sebep,
                 iptalEden: "admin",
@@ -585,7 +573,7 @@ function Admin() {
         if (!window.confirm(`Kullanıcı rolü "${yeniRol}" olarak değiştirilecek. Emin misiniz?`)) return;
 
         try {
-            await updateDoc(doc(db, "kullanicilar", kullaniciId), { rol: yeniRol });
+            await updateDoc("kullanicilar", kullaniciId, { rol: yeniRol });
             alert("✅ Rol güncellendi!");
         } catch (err) {
             alert("Hata: " + err.message);
@@ -597,7 +585,7 @@ function Admin() {
         if (!window.confirm(`Bu kullanıcıyı ${islem}. Emin misiniz?`)) return;
 
         try {
-            await updateDoc(doc(db, "kullanicilar", kullaniciId), {
+            await updateDoc("kullanicilar", kullaniciId, {
                 banliMi: banliMi,
                 banTarihi: banliMi ? serverTimestamp() : null
             });
@@ -611,7 +599,7 @@ function Admin() {
         if (!window.confirm("⚠️ Bu kullanıcı kalıcı olarak silinecek. Emin misiniz?")) return;
 
         try {
-            await deleteDoc(doc(db, "kullanicilar", kullaniciId));
+            await deleteDoc("kullanicilar", kullaniciId);
             setSeciliKullanici(null);
             alert("🗑️ Kullanıcı silindi!");
         } catch (err) {
@@ -625,9 +613,8 @@ function Admin() {
 
         try {
             if (yeniKampanya.global) {
-                // Global kampanya - tüm restoranlara ekle
-                const batch = writeBatch(db);
-                restoranlar.forEach(res => {
+                // Global kampanya - tüm restoranlara ekle (BATCH KULLANIMI)
+                const updates = restoranlar.map(res => {
                     const yeniKampanyaObj = {
                         baslik: yeniKampanya.baslik,
                         tip: yeniKampanya.tip,
@@ -638,17 +625,22 @@ function Admin() {
                         olusturulmaTarihi: new Date()
                     };
                     const mevcutKampanyalar = res.kampanyalar || [];
-                    batch.update(doc(db, "restoranlar", res.id), {
-                        kampanyalar: [...mevcutKampanyalar, yeniKampanyaObj]
-                    });
+                    return {
+                        id: res.id,
+                        data: { kampanyalar: [...mevcutKampanyalar, yeniKampanyaObj] }
+                    };
                 });
-                await batch.commit();
+
+                // Batch helper kullanımı (veya döngü ile updateDoc)
+                for (const update of updates) {
+                    await updateDoc("restoranlar", update.id, update.data);
+                }
+
                 alert("✅ Global kampanya tüm restoranlara eklendi!");
             } else {
                 // Tek restoran kampanyası
                 if (!yeniKampanya.restoranId) return alert("Lütfen restoran seçin!");
 
-                const seciliResRef = doc(db, "restoranlar", yeniKampanya.restoranId);
                 const mevcutRes = restoranlar.find(r => r.id === yeniKampanya.restoranId);
                 const yeniKampanyaObj = {
                     baslik: yeniKampanya.baslik,
@@ -659,7 +651,7 @@ function Admin() {
                     olusturulmaTarihi: new Date()
                 };
                 const mevcutKampanyalar = mevcutRes.kampanyalar || [];
-                await updateDoc(seciliResRef, { kampanyalar: [...mevcutKampanyalar, yeniKampanyaObj] });
+                await updateDoc("restoranlar", yeniKampanya.restoranId, { kampanyalar: [...mevcutKampanyalar, yeniKampanyaObj] });
                 alert("✅ Kampanya eklendi!");
             }
 
@@ -678,7 +670,7 @@ function Admin() {
             const res = restoranlar.find(r => r.id === restoranId);
             const yeniKampanyalar = [...(res.kampanyalar || [])];
             yeniKampanyalar.splice(kampanyaIndex, 1);
-            await updateDoc(doc(db, "restoranlar", restoranId), { kampanyalar: yeniKampanyalar });
+            await updateDoc("restoranlar", restoranId, { kampanyalar: yeniKampanyalar });
             alert("🗑️ Kampanya silindi!");
         } catch (err) {
             alert("Hata: " + err.message);
@@ -690,7 +682,7 @@ function Admin() {
             const res = restoranlar.find(r => r.id === restoranId);
             const yeniKampanyalar = [...(res.kampanyalar || [])];
             yeniKampanyalar[kampanyaIndex].aktif = !yeniKampanyalar[kampanyaIndex].aktif;
-            await updateDoc(doc(db, "restoranlar", restoranId), { kampanyalar: yeniKampanyalar });
+            await updateDoc("restoranlar", restoranId, { kampanyalar: yeniKampanyalar });
         } catch (err) {
             alert("Hata: " + err.message);
         }
@@ -703,8 +695,7 @@ function Admin() {
         const sehirKey = trKarakterCevir(yeniSehir);
 
         try {
-            const bolgeRef = doc(db, "bolgeler", "turkiye");
-            const bolgeSnap = await getDoc(bolgeRef);
+            const bolgeSnap = await getDoc("bolgeler", "turkiye");
 
             let mevcutBolgeler = {};
             if (bolgeSnap.exists()) {
@@ -720,7 +711,7 @@ function Admin() {
                 ilceler: {}
             };
 
-            await setDoc(bolgeRef, mevcutBolgeler);
+            await setDoc("bolgeler", "turkiye", mevcutBolgeler);
             alert(`✅ ${yeniSehir} eklendi!`);
             setYeniSehir("");
         } catch (err) {
@@ -735,12 +726,23 @@ function Admin() {
         const ilceKey = trKarakterCevir(yeniIlce);
 
         try {
-            const bolgeRef = doc(db, "bolgeler", "turkiye");
-            const bolgeSnap = await getDoc(bolgeRef);
+            const { data: bolgeData, error: bolgeError } = await supabase
+                .from("bolgeler")
+                .select("data")
+                .eq("id", "turkiye")
+                .single();
 
-            if (!bolgeSnap.exists()) return alert("Bölge verisi bulunamadı!");
+            if (bolgeError && bolgeError.code !== 'PGRST116') {
+                throw bolgeError;
+            }
 
-            const mevcutBolgeler = bolgeSnap.data();
+            if (!bolgeData || !bolgeData.data) return alert("Bölge verisi bulunamadı!");
+
+            const mevcutBolgeler = bolgeData.data;
+
+            if (!mevcutBolgeler[seciliSehir]) {
+                return alert("Seçili şehir bulunamadı!");
+            }
 
             if (mevcutBolgeler[seciliSehir]?.ilceler[ilceKey]) {
                 return alert("Bu ilçe zaten mevcut!");
@@ -751,7 +753,7 @@ function Admin() {
                 mahalleler: []
             };
 
-            await setDoc(bolgeRef, mevcutBolgeler);
+            await setDoc("bolgeler", "turkiye", mevcutBolgeler);
             alert(`✅ ${yeniIlce} ilçesi eklendi!`);
             setYeniIlce("");
         } catch (err) {
@@ -765,8 +767,7 @@ function Admin() {
             return alert("Lütfen tüm seçimleri yapın!");
 
         try {
-            const bolgeRef = doc(db, "bolgeler", "turkiye");
-            const bolgeSnap = await getDoc(bolgeRef);
+            const bolgeSnap = await getDoc("bolgeler", "turkiye");
 
             if (!bolgeSnap.exists()) return alert("Bölge verisi bulunamadı!");
 
@@ -778,7 +779,7 @@ function Admin() {
 
             mevcutBolgeler[seciliSehir].ilceler[seciliIlce].mahalleler.push(yeniMahalle.trim());
 
-            await setDoc(bolgeRef, mevcutBolgeler);
+            await setDoc("bolgeler", "turkiye", mevcutBolgeler);
             alert(`✅ ${yeniMahalle} eklendi!`);
             setYeniMahalle("");
         } catch (err) {
@@ -791,15 +792,14 @@ function Admin() {
         if (!window.confirm(`"${bolgeler[sehirKey]?.ad}" şehri ve tüm alt bölgeleri silinecek. Emin misiniz?`)) return;
 
         try {
-            const bolgeRef = doc(db, "bolgeler", "turkiye");
-            const bolgeSnap = await getDoc(bolgeRef);
+            const bolgeSnap = await getDoc("bolgeler", "turkiye");
 
             if (!bolgeSnap.exists()) return alert("Bölge verisi bulunamadı!");
 
             const mevcutBolgeler = bolgeSnap.data();
             delete mevcutBolgeler[sehirKey];
 
-            await setDoc(bolgeRef, mevcutBolgeler);
+            await setDoc("bolgeler", "turkiye", mevcutBolgeler);
             alert("🗑️ Şehir silindi!");
 
             if (seciliSehir === sehirKey) {
@@ -816,15 +816,14 @@ function Admin() {
         if (!window.confirm(`"${bolgeler[sehirKey]?.ilceler[ilceKey]?.ad}" ilçesi ve tüm mahalleleri silinecek. Emin misiniz?`)) return;
 
         try {
-            const bolgeRef = doc(db, "bolgeler", "turkiye");
-            const bolgeSnap = await getDoc(bolgeRef);
+            const bolgeSnap = await getDoc("bolgeler", "turkiye");
 
             if (!bolgeSnap.exists()) return alert("Bölge verisi bulunamadı!");
 
             const mevcutBolgeler = bolgeSnap.data();
             delete mevcutBolgeler[sehirKey].ilceler[ilceKey];
 
-            await setDoc(bolgeRef, mevcutBolgeler);
+            await setDoc("bolgeler", "turkiye", mevcutBolgeler);
             alert("🗑️ İlçe silindi!");
 
             if (seciliIlce === ilceKey) {
@@ -840,8 +839,7 @@ function Admin() {
         if (!window.confirm(`"${mahalleAd}" mahallesini silmek istediğinize emin misiniz?`)) return;
 
         try {
-            const bolgeRef = doc(db, "bolgeler", "turkiye");
-            const bolgeSnap = await getDoc(bolgeRef);
+            const bolgeSnap = await getDoc("bolgeler", "turkiye");
 
             if (!bolgeSnap.exists()) return alert("Bölge verisi bulunamadı!");
 
@@ -849,7 +847,7 @@ function Admin() {
             mevcutBolgeler[sehirKey].ilceler[ilceKey].mahalleler =
                 mevcutBolgeler[sehirKey].ilceler[ilceKey].mahalleler.filter(m => m !== mahalleAd);
 
-            await setDoc(bolgeRef, mevcutBolgeler);
+            await setDoc("bolgeler", "turkiye", mevcutBolgeler);
             alert("🗑️ Mahalle silindi!");
         } catch (err) {
             console.error("Mahalle silme hatası:", err);
@@ -862,11 +860,11 @@ function Admin() {
         if (!talepCevap.trim()) return alert("Lütfen cevap yazın!");
 
         try {
-            await updateDoc(doc(db, "destek_talepleri", talepId), {
+            await updateDoc("destek_talepleri", talepId, {
                 durum: "Cevaplandı",
                 cevap: talepCevap,
                 cevapTarihi: serverTimestamp(),
-                cevaplayan: adminBilgi?.email
+                cevaplayan: adminBilgi.email
             });
             setTalepCevap("");
             setTalepDetayModal(false);
@@ -878,7 +876,7 @@ function Admin() {
 
     const talepDurumGuncelle = async (talepId, yeniDurum) => {
         try {
-            await updateDoc(doc(db, "destek_talepleri", talepId), {
+            await updateDoc("destek_talepleri", talepId, {
                 durum: yeniDurum,
                 sonGuncelleme: serverTimestamp()
             });
@@ -890,7 +888,7 @@ function Admin() {
     const talepSil = async (talepId) => {
         if (!window.confirm("Bu talep silinecek. Emin misiniz?")) return;
         try {
-            await deleteDoc(doc(db, "destek_talepleri", talepId));
+            await deleteDoc("destek_talepleri", talepId);
         } catch (err) {
             alert("Hata: " + err.message);
         }
@@ -902,7 +900,7 @@ function Admin() {
         if (!tutar || isNaN(Number(tutar))) return;
 
         try {
-            await addDoc(collection(db, "odemeler"), {
+            await addDoc("odemeler", {
                 restoranId: restoran.id,
                 restoranAd: restoran.isim,
                 tutar: Number(tutar),
@@ -924,10 +922,10 @@ function Admin() {
         if (!window.confirm(`${secililer.length} restorana toplam ödeme yapılacak. Devam?`)) return;
 
         try {
-            const batch = writeBatch(db);
-            secililer.forEach(r => {
-                const odemeRef = doc(collection(db, "odemeler"));
-                batch.set(odemeRef, {
+            const operations = secililer.map(r => ({
+                type: 'add',
+                collection: 'odemeler',
+                data: {
                     restoranId: r.id,
                     restoranAd: r.isim,
                     tutar: r.kalanBakiye,
@@ -935,9 +933,9 @@ function Admin() {
                     odemeTipi: "Toplu Ödeme",
                     islemYapan: adminBilgi?.email,
                     durum: "Tamamlandı"
-                });
-            });
-            await batch.commit();
+                }
+            }));
+            await batchOperations(operations);
             alert(`✅ ${secililer.length} restorana ödeme yapıldı!`);
         } catch (err) {
             alert("Hata: " + err.message);
@@ -947,12 +945,12 @@ function Admin() {
     // --- AYARLAR İŞLEMLERİ ---
     const ayarlariKaydet = async () => {
         try {
-            await updateDoc(doc(db, "sistem", "ayarlar"), platformAyarlari);
+            await updateDoc("sistem", "ayarlar", platformAyarlari);
             alert("✅ Ayarlar kaydedildi!");
         } catch (err) {
             // Döküman yoksa oluştur
             try {
-                await setDoc(doc(db, "sistem", "ayarlar"), platformAyarlari);
+                await setDoc("sistem", "ayarlar", platformAyarlari);
                 alert("✅ Ayarlar kaydedildi!");
             } catch (e) {
                 alert("Hata: " + e.message);
@@ -964,7 +962,7 @@ function Admin() {
         if (!duyuruMetni.trim()) return alert("Lütfen duyuru metni yazın!");
 
         try {
-            await addDoc(collection(db, "duyurular"), {
+            await addDoc("duyurular", {
                 mesaj: duyuruMetni,
                 tarih: serverTimestamp(),
                 gonderen: adminBilgi?.email,
@@ -980,7 +978,6 @@ function Admin() {
     const copleriTemizle = async () => {
         if (!window.confirm("30 günden eski İPTAL edilmiş siparişler silinecek. Devam?")) return;
 
-        const batch = writeBatch(db);
         const eskiTarih = new Date();
         eskiTarih.setDate(eskiTarih.getDate() - 30);
 
@@ -991,8 +988,13 @@ function Admin() {
 
         if (silinecekler.length === 0) return alert("Silinecek eski veri bulunamadı.");
 
-        silinecekler.forEach(s => batch.delete(doc(db, "siparisler", s.id)));
-        await batch.commit();
+        const operations = silinecekler.map(s => ({
+            type: 'delete',
+            collection: 'siparisler',
+            id: s.id
+        }));
+
+        await batchOperations(operations);
         alert(`🧹 ${silinecekler.length} kayıt temizlendi!`);
     };
 
@@ -1002,7 +1004,7 @@ function Admin() {
 
         setYukleniyor(true);
         try {
-            const batch = writeBatch(db);
+            // Kupon dağıtma işlemini tek tek yapalım (arrayUnion nedeniyle)
             const kuponObj = {
                 kod: kupon.kod,
                 baslik: kupon.kod + " Fırsatı",
@@ -1012,12 +1014,10 @@ function Admin() {
                 eklenmeTarihi: new Date().toISOString()
             };
 
-            kullanicilar.forEach(user => {
-                const userRef = doc(db, "kullanicilar", user.id);
-                batch.update(userRef, { kuponlarim: arrayUnion(kuponObj) });
-            });
+            for (const user of kullanicilar) {
+                await arrayUnion("kullanicilar", user.id, "kuponlarim", kuponObj);
+            }
 
-            await batch.commit();
             alert(`✅ Kupon ${kullanicilar.length} kullanıcıya başarıyla dağıtıldı!`);
         } catch (err) {
             console.error("Kupon dağıtma hatası:", err);
@@ -1108,7 +1108,7 @@ function Admin() {
                         </div>
                     </div>
                     <button
-                        onClick={() => { setYukleniyor(true); signOut(auth); }}
+                        onClick={() => { setYukleniyor(true); signOut(); }}
                         style={styles.logoutButton}
                     >
                         🚪 Çıkış Yap
@@ -2304,7 +2304,7 @@ function Admin() {
                                                     <div style={{ display: 'flex', gap: '8px' }}>
                                                         <button
                                                             onClick={async () => {
-                                                                await updateDoc(doc(db, "kuponlar", kupon.id), { aktif: !kupon.aktif });
+                                                                await updateDoc("kuponlar", kupon.id, { aktif: !kupon.aktif });
                                                             }}
                                                             style={{ ...styles.actionBtn, color: kupon.aktif ? '#f59e0b' : '#10b981' }}
                                                             title={kupon.aktif ? 'Pasife Al' : 'Aktifleştir'}
@@ -2314,7 +2314,7 @@ function Admin() {
                                                         <button
                                                             onClick={async () => {
                                                                 if (window.confirm('Bu kupon silinecek. Emin misiniz?')) {
-                                                                    await deleteDoc(doc(db, "kuponlar", kupon.id));
+                                                                    await deleteDoc("kuponlar", kupon.id);
                                                                 }
                                                             }}
                                                             style={{ ...styles.actionBtn, color: '#ef4444' }}
@@ -3274,7 +3274,7 @@ function Admin() {
                                     return;
                                 }
                                 try {
-                                    await addDoc(collection(db, 'kuponlar'), {
+                                    await addDoc('kuponlar', {
                                         kod: yeniKupon.kod.toUpperCase(),
                                         tip: yeniKupon.tip,
                                         deger: Number(yeniKupon.deger),

@@ -1,14 +1,23 @@
+
 import React, { useState, useEffect } from 'react';
-import { auth, db, googleProvider, facebookProvider } from '../firebase';
 import {
+    supabase,
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
-    updateProfile,
     sendPasswordResetEmail,
-    signInWithPopup,
-    sendEmailVerification
-} from 'firebase/auth';
-import { doc, setDoc, getDoc, updateDoc, serverTimestamp, increment, collection, query, where, getDocs, addDoc } from 'firebase/firestore';
+    signOut,
+    signInWithGoogle,
+    signInWithFacebook,
+    getDoc,
+    setDoc,
+    updateDoc,
+    addDoc,
+    getCollection,
+    queryCollection,
+    getDocs, // Uyumluluk için
+    serverTimestamp,
+    incrementField
+} from '../supabaseHelpers';
 import { useNavigate } from 'react-router-dom';
 
 // reCAPTCHA Site Key (Test key - production'da değiştirin)
@@ -229,9 +238,9 @@ function Login() {
         const numbers = value.replace(/\D/g, '');
         const limited = numbers.slice(0, 11);
         if (limited.length <= 4) return limited;
-        if (limited.length <= 7) return `${limited.slice(0, 4)} ${limited.slice(4)}`;
-        if (limited.length <= 9) return `${limited.slice(0, 4)} ${limited.slice(4, 7)} ${limited.slice(7)}`;
-        return `${limited.slice(0, 4)} ${limited.slice(4, 7)} ${limited.slice(7, 9)} ${limited.slice(9)}`;
+        if (limited.length <= 7) return `${limited.slice(0, 4)} ${limited.slice(4)} `;
+        if (limited.length <= 9) return `${limited.slice(0, 4)} ${limited.slice(4, 7)} ${limited.slice(7)} `;
+        return `${limited.slice(0, 4)} ${limited.slice(4, 7)} ${limited.slice(7, 9)} ${limited.slice(9)} `;
     };
 
     const validateTelefon = (tel) => {
@@ -271,7 +280,7 @@ function Login() {
         const remaining = Math.max(0, lockoutUntil - Date.now());
         const minutes = Math.floor(remaining / 60000);
         const seconds = Math.floor((remaining % 60000) / 1000);
-        return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        return `${minutes}:${seconds.toString().padStart(2, '0')} `;
     };
 
     // === KULLANICI KAYIT/KONTROL ===
@@ -311,7 +320,7 @@ function Login() {
     // === GOOGLE İLE GİRİŞ ===
     const handleGoogleLogin = async () => {
         if (isLocked) {
-            setError(`🔒 Hesabınız geçici olarak kilitlendi. Kalan süre: ${formatRemainingTime()}`);
+            setError(`🔒 Hesabınız geçici olarak kilitlendi.Kalan süre: ${formatRemainingTime()} `);
             return;
         }
 
@@ -322,51 +331,59 @@ function Login() {
             // reCAPTCHA kontrolü
             await executeRecaptcha('google_login');
 
-            const result = await signInWithPopup(auth, googleProvider);
-            const user = result.user;
-
-            // Kullanıcıyı kontrol et/oluştur
-            const { userData } = await createOrUpdateUser(user, { provider: 'google' });
-
-            // Ban kontrolü
-            if (userData?.banliMi) {
-                setError("⛔ Hesabınız erişime engellenmiştir.");
-                await auth.signOut();
-                setLoading(false);
-                return;
-            }
-
-            // 🆕 BAKIM MODU KONTROLÜ (Rol Bazlı) - Google
-            try {
-                const settingsDoc = await getDoc(doc(db, "sistem", "ayarlar"));
-                if (settingsDoc.exists()) {
-                    const settings = settingsDoc.data();
-                    if (settings.bakimModu && userData?.rol === "musteri") {
-                        setError("⚠️ " + (settings.bakimMesaji || "Sistem şu anda bakımda. Lütfen daha sonra tekrar deneyin."));
-                        await auth.signOut();
-                        setLoading(false);
-                        return;
-                    }
+            const { data, error } = await supabase.auth.signInWithOAuth({
+                provider: 'google',
+                options: {
+                    redirectTo: window.location.origin + '/auth/callback'
                 }
-            } catch (err) {
-                // Bakım modu hatası yutuldu
-            }
+            });
 
-            resetAttempts();
-            setSuccess("🚀 Google ile giriş başarılı!");
+            if (error) throw error;
+            // Supabase'de signInWithOAuth genellikle yönlendirme yapar,
+            // bu yüzden burada doğrudan user objesi gelmez.
+            // Callback sayfasında işlem tamamlanır.
+            // Eğer test ortamında doğrudan user geliyorsa aşağıdaki blok kullanılabilir.
+            // if (data.user) {
+            //     const user = data.user;
+            //     const { userData } = await createOrUpdateUser(user, { provider: 'google' });
 
-            // Yönlendirme
-            setTimeout(() => {
-                if (userData?.rol === "superadmin") navigate("/admin");
-                else if (userData?.rol === "restoran") navigate("/magaza-paneli");
-                else navigate("/");
-            }, 1500);
+            //     if (userData?.banliMi) {
+            //         setError("⛔ Hesabınız erişime engellenmiştir.");
+            //         await supabase.auth.signOut();
+            //         setLoading(false);
+            //         return;
+            //     }
+
+            //     try {
+            //         const settingsDoc = await getDoc(doc(db, "sistem", "ayarlar"));
+            //         if (settingsDoc.exists()) {
+            //             const settings = settingsDoc.data();
+            //             if (settings.bakimModu && userData?.rol === "musteri") {
+            //                 setError("⚠️ " + (settings.bakimMesaji || "Sistem şu anda bakımda. Lütfen daha sonra tekrar deneyin."));
+            //                 await supabase.auth.signOut();
+            //                 setLoading(false);
+            //                 return;
+            //             }
+            //         }
+            //     } catch (err) {
+            //         // Bakım modu hatası yutuldu
+            //     }
+
+            //     resetAttempts();
+            //     setSuccess("🚀 Google ile giriş başarılı!");
+
+            //     setTimeout(() => {
+            //         if (userData?.rol === "superadmin") navigate("/admin");
+            //         else if (userData?.rol === "restoran") navigate("/magaza-paneli");
+            //         else navigate("/");
+            //     }, 1500);
+            // }
 
         } catch (err) {
             console.error("Google giriş hatası:", err);
-            if (err.code === 'auth/popup-closed-by-user') {
-                setError("Giriş iptal edildi.");
-            } else if (err.code === 'auth/account-exists-with-different-credential') {
+            if (err.message.includes('AuthApiError: Email link is invalid or has expired')) {
+                setError("Giriş iptal edildi veya bağlantı süresi doldu.");
+            } else if (err.message.includes('AuthApiError: User already registered with another provider')) {
                 setError("Bu email başka bir yöntemle kayıtlı. Lütfen o yöntemi kullanın.");
             } else {
                 setError("Google ile giriş başarısız: " + err.message);
@@ -380,7 +397,7 @@ function Login() {
     // === FACEBOOK İLE GİRİŞ ===
     const handleFacebookLogin = async () => {
         if (isLocked) {
-            setError(`🔒 Hesabınız geçici olarak kilitlendi. Kalan süre: ${formatRemainingTime()}`);
+            setError(`🔒 Hesabınız geçici olarak kilitlendi.Kalan süre: ${formatRemainingTime()} `);
             return;
         }
 
@@ -390,48 +407,58 @@ function Login() {
         try {
             await executeRecaptcha('facebook_login');
 
-            const result = await signInWithPopup(auth, facebookProvider);
-            const user = result.user;
-
-            const { userData } = await createOrUpdateUser(user, { provider: 'facebook' });
-
-            if (userData?.banliMi) {
-                setError("⛔ Hesabınız erişime engellenmiştir.");
-                await auth.signOut();
-                setLoading(false);
-                return;
-            }
-
-            // 🆕 BAKIM MODU KONTROLÜ (Rol Bazlı) - Facebook
-            try {
-                const settingsDoc = await getDoc(doc(db, "sistem", "ayarlar"));
-                if (settingsDoc.exists()) {
-                    const settings = settingsDoc.data();
-                    if (settings.bakimModu && userData?.rol === "musteri") {
-                        setError("⚠️ " + (settings.bakimMesaji || "Sistem şu anda bakımda. Lütfen daha sonra tekrar deneyin."));
-                        await auth.signOut();
-                        setLoading(false);
-                        return;
-                    }
+            const { data, error } = await supabase.auth.signInWithOAuth({
+                provider: 'facebook',
+                options: {
+                    redirectTo: window.location.origin + '/auth/callback'
                 }
-            } catch (err) {
-                // Bakım modu hatası yutuldu
-            }
+            });
 
-            resetAttempts();
-            setSuccess("🚀 Facebook ile giriş başarılı!");
+            if (error) throw error;
+            // Supabase'de signInWithOAuth genellikle yönlendirme yapar,
+            // bu yüzden burada doğrudan user objesi gelmez.
+            // Callback sayfasında işlem tamamlanır.
+            // if (data.user) {
+            //     const user = data.user;
+            //     const { userData } = await createOrUpdateUser(user, { provider: 'facebook' });
 
-            setTimeout(() => {
-                if (userData?.rol === "superadmin") navigate("/admin");
-                else if (userData?.rol === "restoran") navigate("/magaza-paneli");
-                else navigate("/");
-            }, 1500);
+            //     if (userData?.banliMi) {
+            //         setError("⛔ Hesabınız erişime engellenmiştir.");
+            //         await supabase.auth.signOut();
+            //         setLoading(false);
+            //         return;
+            //     }
+
+            //     try {
+            //         const settingsDoc = await getDoc(doc(db, "sistem", "ayarlar"));
+            //         if (settingsDoc.exists()) {
+            //             const settings = settingsDoc.data();
+            //             if (settings.bakimModu && userData?.rol === "musteri") {
+            //                 setError("⚠️ " + (settings.bakimMesaji || "Sistem şu anda bakımda. Lütfen daha sonra tekrar deneyin."));
+            //                 await supabase.auth.signOut();
+            //                 setLoading(false);
+            //                 return;
+            //             }
+            //         }
+            //     } catch (err) {
+            //         // Bakım modu hatası yutuldu
+            //     }
+
+            //     resetAttempts();
+            //     setSuccess("🚀 Facebook ile giriş başarılı!");
+
+            //     setTimeout(() => {
+            //         if (userData?.rol === "superadmin") navigate("/admin");
+            //         else if (userData?.rol === "restoran") navigate("/magaza-paneli");
+            //         else navigate("/");
+            //     }, 1500);
+            // }
 
         } catch (err) {
             console.error("Facebook giriş hatası:", err);
-            if (err.code === 'auth/popup-closed-by-user') {
-                setError("Giriş iptal edildi.");
-            } else if (err.code === 'auth/account-exists-with-different-credential') {
+            if (err.message.includes('AuthApiError: Email link is invalid or has expired')) {
+                setError("Giriş iptal edildi veya bağlantı süresi doldu.");
+            } else if (err.message.includes('AuthApiError: User already registered with another provider')) {
                 setError("Bu email başka bir yöntemle kayıtlı.");
             } else {
                 setError("Facebook ile giriş başarısız: " + err.message);
@@ -453,7 +480,7 @@ function Login() {
 
         const normalizedEmail = normalizeEmail(email);
 
-        if (!/\S+@\S+\.\S+/.test(normalizedEmail)) {
+        if (!/\S+@\S+\.\S/.test(normalizedEmail)) {
             setError("Geçerli bir email adresi giriniz.");
             return;
         }
@@ -464,16 +491,19 @@ function Login() {
 
         try {
             await executeRecaptcha('forgot_password');
-            await sendPasswordResetEmail(auth, normalizedEmail);
+            const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+                redirectTo: window.location.origin + '/auth/update-password',
+            });
+            if (error) throw error;
             setSuccess("📧 Şifre sıfırlama bağlantısı email adresinize gönderildi!");
             setShowForgotPassword(false);
             setTimeout(() => setSuccess(""), 5000);
         } catch (err) {
             console.error("Şifre sıfırlama hatası:", err);
             let mesaj = "Şifre sıfırlama bağlantısı gönderilemedi.";
-            if (err.code === "auth/user-not-found") mesaj = "Bu email ile kayıtlı kullanıcı bulunamadı.";
-            else if (err.code === "auth/invalid-email") mesaj = "Geçersiz email formatı.";
-            else if (err.code === "auth/too-many-requests") mesaj = "Çok fazla deneme. Lütfen bekleyin.";
+            if (err.message.includes("AuthApiError: User not found")) mesaj = "Bu email ile kayıtlı kullanıcı bulunamadı.";
+            else if (err.message.includes("AuthApiError: Invalid email")) mesaj = "Geçersiz email formatı.";
+            else if (err.message.includes("AuthApiError: Too many requests")) mesaj = "Çok fazla deneme. Lütfen bekleyin.";
             setError(mesaj);
         } finally {
             setLoading(false);
@@ -486,7 +516,7 @@ function Login() {
 
         // Kilit kontrolü
         if (isLocked) {
-            setError(`🔒 Hesabınız geçici olarak kilitlendi. Kalan süre: ${formatRemainingTime()}`);
+            setError(`🔒 Hesabınız geçici olarak kilitlendi.Kalan süre: ${formatRemainingTime()} `);
             return;
         }
 
@@ -527,9 +557,22 @@ function Login() {
                     // Bakım modu hatası yutuldu
                 }
 
-                const res = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
+                const { data: res, error: signUpError } = await supabase.auth.signUp({
+                    email: normalizedEmail,
+                    password: password,
+                    options: {
+                        data: { full_name: name.trim() },
+                        emailRedirectTo: window.location.origin + '/auth/confirm'
+                    }
+                });
 
-                await updateProfile(res.user, { displayName: name });
+                if (signUpError) throw signUpError;
+                if (!res.user) {
+                    setSuccess(`🎉 Hesabınız oluşturuldu! Lütfen ${normalizedEmail} adresine gönderilen doğrulama linkini onaylayın.`);
+                    setIsRegister(false);
+                    setLoading(false);
+                    return;
+                }
 
                 // 🆕 Referans kodunu doğrula ve davet edeni bul
                 let davetEdenId = null;
@@ -623,7 +666,7 @@ function Login() {
                             kullaniciId: davetEdenId,
                             tip: 'kazanim',
                             miktar: referansBonusu,
-                            aciklama: `Referans Bonusu (${name.trim()})`,
+                            aciklama: `Referans Bonusu(${name.trim()})`,
                             tarih: serverTimestamp()
                         });
                     } catch (e) {
@@ -668,7 +711,7 @@ function Login() {
                             const settings = settingsDoc.data();
                             if (settings.bakimModu && userData.rol === "musteri") {
                                 setError("⚠️ " + (settings.bakimMesaji || "Sistem şu anda bakımda. Lütfen daha sonra tekrar deneyin."));
-                                await auth.signOut();
+                                await signOut();
                                 setLoading(false);
                                 return;
                             }
@@ -1199,7 +1242,7 @@ function Login() {
                         />
                         <div style={styles.modal2FAButtons}>
                             <button
-                                onClick={() => { setShow2FAModal(false); auth.signOut(); }}
+                                onClick={() => { setShow2FAModal(false); signOut(); }}
                                 style={styles.cancelButton}
                             >
                                 İptal
@@ -1217,38 +1260,38 @@ function Login() {
 
             {/* CSS */}
             <style>{`
-                @keyframes float {
-                    0%, 100% { transform: translateY(0px) rotate(0deg); }
-                    50% { transform: translateY(-20px) rotate(180deg); }
-                }
-                @keyframes spin {
-                    0% { transform: rotate(0deg); }
-                    100% { transform: rotate(360deg); }
-                }
-                @keyframes slideIn {
+@keyframes float {
+    0 %, 100 % { transform: translateY(0px) rotate(0deg); }
+    50 % { transform: translateY(-20px) rotate(180deg); }
+}
+@keyframes spin {
+    0 % { transform: rotate(0deg); }
+    100 % { transform: rotate(360deg); }
+}
+@keyframes slideIn {
                     from { opacity: 0; transform: translateY(20px); }
                     to { opacity: 1; transform: translateY(0); }
-                }
-                .form-input:focus {
-                    border-color: #3b82f6 !important;
-                    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
-                }
-                .submit-btn:hover:not(:disabled) {
-                    transform: translateY(-2px);
-                    box-shadow: 0 15px 30px rgba(59, 130, 246, 0.4);
-                }
-                .social-btn:hover:not(:disabled) {
-                    transform: translateY(-2px);
-                    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
-                }
-                .home-btn:hover {
-                    transform: translateY(-2px);
-                }
-                @media (max-width: 1024px) {
-                    .brand-panel { display: none !important; }
-                    .form-panel { flex: 1 !important; }
-                }
-            `}</style>
+}
+                .form - input:focus {
+    border - color: #3b82f6!important;
+    box - shadow: 0 0 0 3px rgba(59, 130, 246, 0.1)!important;
+}
+                .submit - btn: hover: not(: disabled) {
+    transform: translateY(-2px);
+    box - shadow: 0 15px 30px rgba(59, 130, 246, 0.4);
+}
+                .social - btn: hover: not(: disabled) {
+    transform: translateY(-2px);
+    box - shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+}
+                .home - btn:hover {
+    transform: translateY(-2px);
+}
+@media(max - width: 1024px) {
+                    .brand - panel { display: none!important; }
+                    .form - panel { flex: 1!important; }
+}
+`}</style>
         </div>
     );
 }

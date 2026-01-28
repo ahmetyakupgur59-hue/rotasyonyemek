@@ -1,11 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { db, auth } from '../firebase';
 import {
-    collection, query, where, onSnapshot, doc, updateDoc, addDoc,
-    deleteDoc, arrayUnion, arrayRemove, orderBy, serverTimestamp,
-    getDoc // ✅ YENİ EKLEME
-} from 'firebase/firestore';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
+    onSnapshot,
+    onDocSnapshot,
+    updateDoc,
+    addDoc,
+    deleteDoc,
+    arrayUnion,
+    arrayRemove,
+    serverTimestamp,
+    getDoc,
+    queryCollection,
+    onAuthStateChanged,
+    signOut
+} from '../supabaseHelpers';
 import { useNavigate } from 'react-router-dom';
 // 📧 EMAIL SERVİSİ
 import { siparisDurumEmaili } from '../services/emailService';
@@ -150,13 +157,15 @@ function MagazaPaneli() {
             mesaj: new Audio('/message.mp3')
         };
 
-        const unsubAuth = onAuthStateChanged(auth, (user) => {
+        const unsubAuth = onAuthStateChanged((user) => {
             if (user) {
-                const qRes = query(collection(db, "restoranlar"), where("sahipEmail", "==", user.email));
+                // Restoran bilgisi ve bağlı veriler (siparişler, yemekler)
+                const unsubRestoran = onSnapshot("restoranlar", (snap) => {
+                    const resData = snap.docs.find(d => d.data().sahipEmail === user.email)
+                        ? { id: snap.docs.find(d => d.data().sahipEmail === user.email).id, ...snap.docs.find(d => d.data().sahipEmail === user.email).data() }
+                        : null;
 
-                const unsubRestoran = onSnapshot(qRes, (snap) => {
-                    if (!snap.empty) {
-                        const resData = { id: snap.docs[0].id, ...snap.docs[0].data() };
+                    if (resData) {
                         setRestoran(resData);
 
                         // State Doldurma
@@ -182,29 +191,31 @@ function MagazaPaneli() {
                         setLoading(false);
 
                         // ✅ YENİ: Admin bölgelerini dinle
-                        const unsubBolgeler = onSnapshot(doc(db, "bolgeler", "turkiye"), (snapshot) => {
+                        const unsubBolgeler = onDocSnapshot("bolgeler", "turkiye", (snapshot) => {
                             if (snapshot.exists()) {
                                 setAdminBolgeler(snapshot.data());
                             } else {
                                 setAdminBolgeler({});
                             }
-                        }, (error) => {
-                            console.error("Bölgeler yüklenemedi:", error);
-                            setAdminBolgeler({});
                         });
 
                         // Sipariş Dinleme
-                        const qSip = query(collection(db, "siparisler"), where("restoranId", "==", resData.id));
-                        const unsubSiparis = onSnapshot(qSip, (s) => {
-                            const gelen = s.docs.map(d => ({ id: d.id, ...d.data() }));
-                            gelen.sort((a, b) => (b.tarih?.seconds || 0) - (a.tarih?.seconds || 0));
+                        const unsubSiparis = onSnapshot("siparisler", (s) => {
+                            const gelen = s.docs
+                                .filter(d => d.data().restoranId === resData.id)
+                                .map(d => ({ id: d.id, ...d.data() }))
+                                .sort((a, b) => (b.tarih?.seconds || 0) - (a.tarih?.seconds || 0));
                             setSiparisler(gelen);
                             hesaplaFinans(gelen);
                         });
 
                         // Yemek Dinleme
-                        const qMenu = query(collection(db, "yemekler"), where("restoranId", "==", resData.id));
-                        const unsubMenu = onSnapshot(qMenu, (s) => setYemekler(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+                        const unsubMenu = onSnapshot("yemekler", (s) => {
+                            const yemekler = s.docs
+                                .filter(d => d.data().restoranId === resData.id)
+                                .map(d => ({ id: d.id, ...d.data() }));
+                            setYemekler(yemekler);
+                        });
 
                         return () => {
                             unsubBolgeler(); // ✅ Bölge listener'ını temizle
@@ -307,7 +318,7 @@ function MagazaPaneli() {
         const yolda = siparisler.filter(s => ["Hazırlanıyor", "Yolda"].includes(s.durum));
         if (yolda.length > 0) alert(`⚠️ Dükkan kapandı ancak ${yolda.length} aktif sipariş var!`);
 
-        await updateDoc(doc(db, "restoranlar", restoran.id), { acikMi: false });
+        await updateDoc("restoranlar", restoran.id, { acikMi: false });
     };
 
     const mesaiUzat = async () => {
@@ -342,7 +353,7 @@ function MagazaPaneli() {
         };
 
         setCalismaSaatleri(yeniProgram);
-        await updateDoc(doc(db, "restoranlar", restoran.id), { calismaSaatleri: yeniProgram });
+        await updateDoc("restoranlar", restoran.id, { calismaSaatleri: yeniProgram });
         alert(`✅ Mesai 30 dakika uzatıldı. Yeni kapanış: ${yeniSaatStr}`);
     };
 
@@ -371,7 +382,18 @@ function MagazaPaneli() {
             }
         }
 
-        // Mevcut bekleyenleri kaydet (bir sonraki karşılaştırma için)
+        // --- 1. SİLME ve ONAY ---
+        // (button içindeki inline fonksiyonlar)
+        // async () => { if (window.confirm('Hayır?')) await deleteDoc("yemekler", y.id) }
+
+        // --- 2. AYARLAR ---
+        // await updateDoc("restoranlar", restoran.id, { etaAyarlari });
+
+        // --- 3. KAMPANYA ---
+        // await updateDoc("restoranlar", restoran.id, { kampanyalar: yeni });
+
+        // --- 4. RENK ---
+        // color: secili ? '#fca5a5' : '#d1d5db'
         oncekiBekleyenRef.current = bekleyenIdler;
 
     }, [siparisler, sesAyarlari.zil]);
@@ -379,17 +401,20 @@ function MagazaPaneli() {
     // --- CHAT DİNLEME ---
     useEffect(() => {
         if (!aktifChatSiparis) return;
-        const unsubMsg = onSnapshot(
-            query(collection(db, "siparisler", aktifChatSiparis.id, "mesajlar"), orderBy("tarih", "asc")),
-            (s) => setChatMesajlari(s.docs.map(d => d.data()))
-        );
+        const unsubMsg = onSnapshot("siparis_mesajlari", (s) => {
+            const msgs = s.docs
+                .filter(d => d.data().siparisId === aktifChatSiparis.id)
+                .map(d => ({ id: d.id, ...d.data() }))
+                .sort((a, b) => (a.tarih?.seconds || 0) - (b.tarih?.seconds || 0));
+            setChatMesajlari(msgs);
+        });
         return () => unsubMsg();
     }, [aktifChatSiparis]);
     // --- HANDLERLAR ---
 
     const profilKaydet = async () => {
         if (!profilForm.telefon) return alert("❌ Telefon numarası zorunludur!");
-        await updateDoc(doc(db, "restoranlar", restoran.id), profilForm);
+        await updateDoc("restoranlar", restoran.id, profilForm);
         alert("✅ Profil başarıyla güncellendi.");
     };
 
@@ -409,11 +434,11 @@ function MagazaPaneli() {
         };
 
         if (duzenlemeModu) {
-            await updateDoc(doc(db, "yemekler", duzenlemeModu), veri);
+            await updateDoc("yemekler", duzenlemeModu, veri);
             alert("Ürün güncellendi.");
             setDuzenlemeModu(null);
         } else {
-            await addDoc(collection(db, "yemekler"), veri);
+            await addDoc("yemekler", veri);
             alert("Ürün eklendi.");
         }
         setUrunForm({ ad: "", fiyat: "", aciklama: "", kategori: "Genel", resim: "", secenekler: [], allerjenler: [] });
@@ -433,7 +458,7 @@ function MagazaPaneli() {
     // ✅ YENİ: Stok durumu değiştirme
     const stokDurumuDegistir = async (urunId, mevcutDurum) => {
         try {
-            await updateDoc(doc(db, "yemekler", urunId), {
+            await updateDoc("yemekler", urunId, {
                 stokta: !mevcutDurum
             });
         } catch (error) {
@@ -488,7 +513,7 @@ function MagazaPaneli() {
 
             for (const urun of hedefUrunler) {
                 const yeniFiyat = Math.round(urun.fiyat * carpan * 100) / 100;
-                await updateDoc(doc(db, "yemekler", urun.id), {
+                await updateDoc("yemekler", urun.id, {
                     fiyat: yeniFiyat,
                     sonFiyatGuncelleme: serverTimestamp(),
                     eskiFiyat: urun.fiyat
@@ -530,7 +555,7 @@ function MagazaPaneli() {
         const tahminiTeslim = new Date();
         tahminiTeslim.setMinutes(tahminiTeslim.getMinutes() + eta.max);
 
-        await updateDoc(doc(db, "siparisler", siparisId), {
+        await updateDoc("siparisler", siparisId, {
             durum: "Hazırlanıyor",
             sonGuncelleme: serverTimestamp(),
             tahminiTeslim: tahminiTeslim,
@@ -558,7 +583,7 @@ function MagazaPaneli() {
         }
 
         // Durumu güncelle
-        await updateDoc(doc(db, "siparisler", id), {
+        await updateDoc("siparisler", id, {
             durum: yeniDurum,
             sonGuncelleme: serverTimestamp()
         });
@@ -594,8 +619,7 @@ function MagazaPaneli() {
         }
 
         // Müşteri bilgilerini al
-        const musteriRef = doc(db, "kullanicilar", musteriId);
-        const musteriDoc = await getDoc(musteriRef);
+        const musteriDoc = await getDoc("kullanicilar", musteriId);
 
         if (!musteriDoc.exists()) {
             console.warn("Müşteri dökümanı bulunamadı");
@@ -642,7 +666,7 @@ function MagazaPaneli() {
         const toplamKazanilan = kazanilanPuan + bonusPuan;
 
         // ✅ TUTARLI ALAN ADLARI İLE KAYDET
-        await updateDoc(musteriRef, {
+        await updateDoc("kullanicilar", musteriId, {
             puanBakiye: mevcutPuan + toplamKazanilan,           // ✅ Profil.js ile aynı
             toplamKazanilanPuan: mevcutToplamKazanilan + toplamKazanilan, // ✅
             streakSayisi: yeniStreak,                           // ✅
@@ -650,7 +674,7 @@ function MagazaPaneli() {
         });
 
         // 📊 Siparişe de puan bilgisini ekle (geçmişte görünsün)
-        await updateDoc(doc(db, "siparisler", siparis.id), {
+        await updateDoc("siparisler", siparis.id, {
             kazanilanPuan: toplamKazanilan,
             bonusPuan: bonusPuan
         });
@@ -661,7 +685,7 @@ function MagazaPaneli() {
     const siparisIptalEt = async (id) => {
         const sebep = window.prompt("İptal Sebebi (Zorunlu):");
         if (!sebep) return alert("Sebep girmeden iptal edemezsiniz.");
-        await updateDoc(doc(db, "siparisler", id), { durum: "İptal Edildi", iptalSebebi: sebep, sonGuncelleme: serverTimestamp() });
+        await updateDoc("siparisler", id, { durum: "İptal Edildi", iptalSebebi: sebep, sonGuncelleme: serverTimestamp() });
     };
 
     const kampanyaKaydet = async () => {
@@ -673,7 +697,7 @@ function MagazaPaneli() {
             eskiFiyat: Number(yeniKampanya.eskiFiyat || 0)
         };
         const guncel = [...(restoran.kampanyalar || []), kampanyaObj];
-        await updateDoc(doc(db, "restoranlar", restoran.id), { kampanyalar: guncel });
+        await updateDoc("restoranlar", restoran.id, { kampanyalar: guncel });
         setKampanyalar(guncel);
         setYeniKampanya({ baslik: "", tip: "yuzde", deger: 0, minSepet: 0, hedefUrunler: [], eskiFiyat: 0, aktif: true });
         alert("Kampanya oluşturuldu.");
@@ -711,9 +735,7 @@ function MagazaPaneli() {
         }
 
         try {
-            await updateDoc(doc(db, "restoranlar", restoran.id), {
-                bolgeler: arrayUnion(yeniBolge)
-            });
+            await arrayUnion("restoranlar", restoran.id, "bolgeler", yeniBolge);
 
             // Form'u temizle
             setSeciliSehir("");
@@ -729,7 +751,7 @@ function MagazaPaneli() {
     };
 
     const ayarlariKaydet = async () => {
-        await updateDoc(doc(db, "restoranlar", restoran.id), {
+        await updateDoc("restoranlar", restoran.id, {
             calismaSaatleri: calismaSaatleri,
             otomatikMod: otomatikMod,
             sesAyarlari: sesAyarlari
@@ -738,7 +760,7 @@ function MagazaPaneli() {
     };
 
     const dukkanDurumGuncelle = async (alan, deger) => {
-        await updateDoc(doc(db, "restoranlar", restoran.id), { [alan]: deger });
+        await updateDoc("restoranlar", restoran.id, { [alan]: deger });
         if (alan === 'kotuHava') setKotuHava(deger);
         if (alan === 'yogunluk') setYogunluk(deger);
         if (alan === 'otomatikMod') setOtomatikMod(deger);
@@ -752,7 +774,7 @@ function MagazaPaneli() {
         const kotuHavaDurum = yeniDurum === "Kötü Hava";
         setKotuHava(kotuHavaDurum);
 
-        await updateDoc(doc(db, "restoranlar", restoran.id), {
+        await updateDoc("restoranlar", restoran.id, {
             yogunluk: yeniDurum,
             kotuHava: kotuHavaDurum
         });
@@ -770,7 +792,8 @@ function MagazaPaneli() {
             yeniListe = [...onerilenUrunler, urunId];
         }
         setOnerilenUrunler(yeniListe);
-        await updateDoc(doc(db, "restoranlar", restoran.id), { onerilenUrunler: yeniListe });
+        setOnerilenUrunler(yeniListe);
+        await updateDoc("restoranlar", restoran.id, { onerilenUrunler: yeniListe });
     };
 
     // Chat
@@ -778,14 +801,20 @@ function MagazaPaneli() {
     const mesajGonder = async (e) => {
         e.preventDefault();
         if (!yeniMesaj.trim()) return;
-        await addDoc(collection(db, "siparisler", aktifChatSiparis.id, "mesajlar"), { gonderen: "Restoran", mesaj: yeniMesaj, tarih: serverTimestamp() });
+        await addDoc("siparis_mesajlari", {
+            siparisId: aktifChatSiparis.id,
+            gonderen: "Restoran",
+            mesaj: yeniMesaj,
+            tarih: serverTimestamp()
+        });
         setYeniMesaj("");
     };
 
     // Destek
+    // Destek
     const sikayetGonder = async () => {
         if (!sikayetMetni.trim()) return alert("Mesaj yazın.");
-        await addDoc(collection(db, "destek_talepleri"), { restoranId: restoran.id, kimden: restoran.isim, telefon: restoran.telefon || "Yok", konu: sikayetMetni, durum: "Bekliyor", tarih: new Date(), tur: "restoran" });
+        await addDoc("destek_talepleri", { restoranId: restoran.id, kimden: restoran.isim, telefon: restoran.telefon || "Yok", konu: sikayetMetni, durum: "Bekliyor", tarih: new Date(), tur: "restoran" });
         alert("İletildi."); setSikayetMetni("");
     };
 
@@ -1053,7 +1082,7 @@ function MagazaPaneli() {
                     )}
                 </div>
 
-                <button onClick={() => signOut(auth).then(() => navigate('/login'))} style={{ margin: '20px', padding: '12px', background: '#374151', border: 'none', color: '#9ca3af', borderRadius: '8px', cursor: 'pointer' }}>Çıkış Yap</button>
+                <button onClick={() => signOut().then(() => navigate('/login'))} style={{ margin: '20px', padding: '12px', background: '#374151', border: 'none', color: '#9ca3af', borderRadius: '8px', cursor: 'pointer' }}>Çıkış Yap</button>
             </div>
 
             {/* MAIN CONTENT */}
@@ -1391,7 +1420,7 @@ function MagazaPaneli() {
 
                                         <td style={{ padding: '10px' }}>
                                             <button onClick={() => urunDuzenle(y)} style={{ background: '#3b82f6', border: 'none', color: 'white', padding: '5px 10px', borderRadius: '5px', cursor: 'pointer', marginRight: '5px' }}>Düzenle</button>
-                                            <button onClick={async () => { if (window.confirm('Sil?')) await deleteDoc(doc(db, "yemekler", y.id)) }} style={{ background: '#ef4444', border: 'none', color: 'white', padding: '5px 10px', borderRadius: '5px', cursor: 'pointer' }}>Sil</button>
+                                            <button onClick={async () => { if (window.confirm('Sil?')) await deleteDoc("yemekler", y.id) }} style={{ background: '#ef4444', border: 'none', color: 'white', padding: '5px 10px', borderRadius: '5px', cursor: 'pointer' }}>Sil</button>
                                         </td>
                                     </tr>
                                 ))}
@@ -1521,7 +1550,7 @@ function MagazaPaneli() {
 
                                 <button
                                     onClick={async () => {
-                                        await updateDoc(doc(db, "restoranlar", restoran.id), { etaAyarlari });
+                                        await updateDoc("restoranlar", restoran.id, { etaAyarlari });
                                         alert("✅ ETA ayarları kaydedildi!");
                                     }}
                                     style={{ ...btnPrimary, marginTop: '15px' }}
@@ -1658,9 +1687,7 @@ function MagazaPaneli() {
                                                 <button
                                                     onClick={async () => {
                                                         if (window.confirm(`"${b.mahalle}" mahallesini kaldırmak istediğinize emin misiniz?`)) {
-                                                            await updateDoc(doc(db, "restoranlar", restoran.id), {
-                                                                bolgeler: arrayRemove(b)
-                                                            });
+                                                            await arrayRemove("restoranlar", restoran.id, "bolgeler", b);
                                                         }
                                                     }}
                                                     style={{
@@ -2090,7 +2117,7 @@ function MagazaPaneli() {
                                     </div>
                                     <button onClick={async () => {
                                         const yeni = [...kampanyalar]; yeni.splice(i, 1);
-                                        await updateDoc(doc(db, "restoranlar", restoran.id), { kampanyalar: yeni });
+                                        await updateDoc("restoranlar", restoran.id, { kampanyalar: yeni });
                                         setKampanyalar(yeni);
                                     }} style={{ position: 'absolute', top: '10px', right: '10px', background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '18px' }}>×</button>
                                 </div>

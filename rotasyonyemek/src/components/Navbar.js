@@ -1,26 +1,28 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { auth, db } from '../firebase';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import {
+  onAuthStateChanged,
+  signOut,
+  queryCollection,
+  onSnapshot
+} from '../supabaseHelpers';
 
 function Navbar() {
   const [user, setUser] = useState(null);
   const [isRestoranSahibi, setIsRestoranSahibi] = useState(false);
   const [menuAcik, setMenuAcik] = useState(false);
-  const timeoutRef = useRef(null); 
+  const timeoutRef = useRef(null);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (currentUser) => {
+    const unsub = onAuthStateChanged((currentUser) => {
       setUser(currentUser);
       if (currentUser) {
-        const q = query(
-          collection(db, "restoranlar"), 
-          where("sahipEmail", "==", currentUser.email.toLowerCase())
-        );
-        const unsubRes = onSnapshot(q, (snap) => {
-          setIsRestoranSahibi(!snap.empty);
+        const unsubRes = onSnapshot("restoranlar", (snap) => {
+          const restoranlar = snap.docs.filter(d =>
+            d.data().sahipEmail === currentUser.email.toLowerCase()
+          );
+          setIsRestoranSahibi(restoranlar.length > 0);
         });
         return () => unsubRes();
       } else {
@@ -42,7 +44,7 @@ function Navbar() {
   };
 
   const handleLogout = async () => {
-    await signOut(auth);
+    await signOut();
     navigate('/login');
   };
 
@@ -53,13 +55,13 @@ function Navbar() {
         <span style={logoTekStil}>TEK</span>
         <span style={logoYemekStil}>YEMEK</span>
       </Link>
-      
+
       <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
         {user ? (
           <>
             {isRestoranSahibi && (
               <Link to="/magaza-paneli" style={magazaPanelStil}>
-                <span style={{fontSize: '18px'}}>🏪</span> Mağaza Paneli
+                <span style={{ fontSize: '18px' }}>🏪</span> Mağaza Paneli
               </Link>
             )}
 
@@ -68,44 +70,44 @@ function Navbar() {
             )}
 
             {/* KULLANICI MENÜSÜ */}
-            <div 
+            <div
               style={{ position: 'relative', zIndex: 1001 }}
               onMouseEnter={menuAc}
               onMouseLeave={menuKapat}
             >
               <div style={{
-                  ...profilTetikleyiciStil, 
-                  backgroundColor: menuAcik ? '#f1f3f5' : '#ffffff',
-                  borderColor: menuAcik ? '#007bff' : 'transparent'
-                }}>
+                ...profilTetikleyiciStil,
+                backgroundColor: menuAcik ? '#f1f3f5' : '#ffffff',
+                borderColor: menuAcik ? '#007bff' : 'transparent'
+              }}>
                 <div style={avatarStil}>
                   {user.email[0].toUpperCase()}
                   <div style={onlineNoktaStil}></div>
                 </div>
                 <span style={emailMetinStil}>{user.email.split('@')[0]}</span>
-                <span style={{ 
-                    fontSize: '12px', 
-                    marginLeft: '8px', 
-                    transform: menuAcik ? 'rotate(180deg)' : 'rotate(0)', 
-                    transition: '0.3s', 
-                    color: '#007bff' 
-                  }}>▼</span>
+                <span style={{
+                  fontSize: '12px',
+                  marginLeft: '8px',
+                  transform: menuAcik ? 'rotate(180deg)' : 'rotate(0)',
+                  transition: '0.3s',
+                  color: '#007bff'
+                }}>▼</span>
               </div>
 
               {/* Açılır Sekme */}
               {menuAcik && (
                 <div style={dropdownMenuStil}>
                   {/* Görünmez köprü: Mouse'un menüye geçerken kaybolmasını engeller */}
-                  <div style={kopruStil}></div> 
-                  
+                  <div style={kopruStil}></div>
+
                   <div style={dropdownHeader}>
                     <p style={headerEmail}>{user.email}</p>
                     <div style={goldUyelikStil}>Standart Üye</div>
                   </div>
-                  
+
                   <Link to="/profil" style={dropdownItemStil}>⚙️ Hesap Ayarlarım</Link>
                   <Link to="/siparislerim" style={dropdownItemStil}>🛍️ Siparişlerim</Link>
-                  
+
                   <div style={divider}></div>
                   <div onClick={handleLogout} style={logoutItemStil}>🚪 Çıkış Yap</div>
                 </div>
@@ -247,12 +249,12 @@ const magazaPanelStil = {
 
 const adminLinkStil = { color: '#636e72', textDecoration: 'none', fontSize: '13px', borderBottom: '1px dashed #b2bec3' };
 
-const loginButonStil = { 
+const loginButonStil = {
   background: '#007bff', // Ana Mavi
-  color: 'white', 
-  padding: '12px 30px', 
-  borderRadius: '12px', 
-  fontWeight: '600', 
+  color: 'white',
+  padding: '12px 30px',
+  borderRadius: '12px',
+  fontWeight: '600',
   textDecoration: 'none',
   boxShadow: '0 4px 15px rgba(0, 123, 255, 0.3)', // Mavi gölge
   transition: '0.3s'

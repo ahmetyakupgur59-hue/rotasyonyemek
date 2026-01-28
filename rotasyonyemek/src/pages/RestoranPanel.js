@@ -1,42 +1,57 @@
 import React, { useState, useEffect } from 'react';
-import { db, auth } from '../firebase';
-import { collection, query, where, onSnapshot, doc, updateDoc, orderBy } from 'firebase/firestore';
+import {
+  onSnapshot,
+  updateDoc,
+  onAuthStateChanged,
+  getCurrentUser
+} from '../supabaseHelpers';
 
 function MagazaPaneli() {
   const [restoran, setRestoran] = useState(null);
   const [siparisler, setSiparisler] = useState([]);
-  const user = auth.currentUser;
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
-    if (!user) return;
+    const unsubAuth = onAuthStateChanged((currentUser) => {
+      setUser(currentUser);
+      if (!currentUser) return;
 
-    // Sadece bu sahibe ait restoranı getir
-    const qRes = query(collection(db, "restoranlar"), where("sahipEmail", "==", user.email));
-    const unsubRes = onSnapshot(qRes, (s) => {
-      if (!s.empty) {
-        const resData = { id: s.docs[0].id, ...s.docs[0].data() };
-        setRestoran(resData);
+      // Sadece bu sahibe ait restoranı getir
+      const unsubRes = onSnapshot("restoranlar", (snap) => {
+        const mevcutRestoran = snap.docs.find(d =>
+          d.data().sahipEmail === currentUser.email.toLowerCase()
+        );
 
-        // Bu restoranın siparişlerini getir
-        const qSip = query(collection(db, "siparisler"), where("restoranId", "==", resData.id), orderBy("tarih", "desc"));
-        onSnapshot(qSip, (snap) => {
-          setSiparisler(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-        });
-      }
+        if (mevcutRestoran) {
+          const resData = { id: mevcutRestoran.id, ...mevcutRestoran.data() };
+          setRestoran(resData);
+
+          // Bu restoranın siparişlerini getir
+          const unsubSip = onSnapshot("siparisler", (sipSnap) => {
+            const filtrelenmis = sipSnap.docs
+              .filter(d => d.data().restoranId === resData.id)
+              .map(d => ({ id: d.id, ...d.data() }))
+              .sort((a, b) => (b.tarih?.seconds || 0) - (a.tarih?.seconds || 0));
+            setSiparisler(filtrelenmis);
+          });
+          return () => unsubSip();
+        }
+      });
+      return () => unsubRes();
     });
-    return () => unsubRes();
-  }, [user]);
+    return () => unsubAuth();
+  }, []);
 
   const durumGuncelle = async (id, yeni) => {
-    await updateDoc(doc(db, "siparisler", id), { durum: yeni });
+    await updateDoc("siparisler", id, { durum: yeni });
   };
 
-  if (!restoran) return <div style={{color:'white', padding:'50px'}}>Mağazanız yükleniyor veya yetkiniz yok...</div>;
+  if (!restoran) return <div style={{ color: 'white', padding: '50px' }}>Mağazanız yükleniyor veya yetkiniz yok...</div>;
 
   return (
     <div style={{ background: '#0d1117', minHeight: '100vh', color: 'white', padding: '30px' }}>
       <h2>🏪 {restoran.isim} Yönetim Paneli</h2>
-      <p style={{color: '#8b949e'}}>Hoş geldiniz, mağazanız şu an <strong>{restoran.durum ? "Açık" : "Kapalı"}</strong></p>
+      <p style={{ color: '#8b949e' }}>Hoş geldiniz, mağazanız şu an <strong>{restoran.durum ? "Açık" : "Kapalı"}</strong></p>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '30px' }}>
         {/* BEKLEYEN SİPARİŞLER */}

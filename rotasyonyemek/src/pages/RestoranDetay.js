@@ -1,14 +1,22 @@
 
 
 import React, { useState, useEffect, useContext, useRef, useMemo, useCallback } from 'react';
-import { db, auth } from '../firebase';
 import {
-  collection, addDoc, serverTimestamp, query, where, doc,
-  onSnapshot, orderBy, updateDoc, arrayUnion, arrayRemove, getDoc,
-  increment, getDocs // 🆕 EKLENDİ
-} from 'firebase/firestore';
+  onSnapshot,
+  onDocSnapshot,
+  getDoc,
+  updateDoc,
+  deleteDoc,
+  addDoc,
+  serverTimestamp,
+  incrementField,
+  arrayUnion,
+  arrayRemove,
+  queryCollection,
+  onAuthStateChanged,
+  getDocs
+} from '../supabaseHelpers';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { onAuthStateChanged } from 'firebase/auth';
 import { ThemeContext } from '../App';
 import '../styles/restoran.css';
 // 📧 EMAIL SERVİSİ
@@ -151,11 +159,11 @@ function RestoranDetay() {
       setTimeout(() => setSiparisModalAcik(true), 500); // Veri yüklenene kadar az bekle
     }
 
-    const unsubAuth = onAuthStateChanged(auth, async (u) => {
+    const unsubAuth = onAuthStateChanged(async (u) => {
       setUser(u);
       if (u) {
         // ✅ Kullanıcı verilerini tek seferde çek
-        const userDoc = await getDoc(doc(db, "kullanicilar", u.uid));
+        const userDoc = await getDoc("kullanicilar", u.id);
         if (userDoc.exists()) {
           const userData = userDoc.data();
 
@@ -184,24 +192,29 @@ function RestoranDetay() {
 
     if (!id) { setError("Restoran ID bulunamadı"); setLoading(false); return; }
 
-    const unsubRestoran = onSnapshot(doc(db, "restoranlar", id), (docSnap) => {
+    const unsubRestoran = onDocSnapshot("restoranlar", id, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         setRestoranBilgi(data);
         setAktifKampanyalar((data.kampanyalar || []).filter(k => k.aktif !== false));
 
-        const qMenu = query(collection(db, "yemekler"), where("restoranId", "==", id));
-        onSnapshot(qMenu, (snap) => {
-          setMenuler(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        const unsubMenu = onSnapshot("yemekler", (snap) => {
+          const filtrelenmis = snap.docs
+            .filter(d => d.data().restoranId === id)
+            .map(d => ({ id: d.id, ...d.data() }));
+          setMenuler(filtrelenmis);
           setLoading(false);
         });
       } else { setError("Restoran bulunamadı"); setLoading(false); }
     }, (err) => { setError("Hata: " + err.message); setLoading(false); });
 
-    const unsubYorumlar = onSnapshot(
-      query(collection(db, "restoranlar", id, "yorumlar"), orderBy("tarih", "desc")),
-      (snap) => setYorumlar(snap.docs.map(d => ({ id: d.id, ...d.data() })))
-    );
+    const unsubYorumlar = onSnapshot("restoran_yorumlari", (snap) => {
+      const filtrelenmis = snap.docs
+        .filter(d => d.data().restoranId === id)
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => (b.tarih?.seconds || 0) - (a.tarih?.seconds || 0));
+      setYorumlar(filtrelenmis);
+    });
 
     return () => { unsubAuth(); unsubRestoran(); unsubYorumlar(); };
   }, [id]);
@@ -213,7 +226,7 @@ function RestoranDetay() {
   // 🆕 Platform ayarlarını ve kullanıcı puan bilgilerini çek
   useEffect(() => {
     // Platform ayarları
-    const unsubAyarlar = onSnapshot(doc(db, "sistem", "ayarlar"), (snap) => {
+    const unsubAyarlar = onDocSnapshot("sistem", "ayarlar", (snap) => {
       if (snap.exists()) {
         setPlatformAyarlari(prev => ({ ...prev, ...snap.data() }));
       }
@@ -226,7 +239,7 @@ function RestoranDetay() {
   useEffect(() => {
     if (!user) return;
 
-    const unsubUser = onSnapshot(doc(db, "kullanicilar", user.uid), (snap) => {
+    const unsubUser = onDocSnapshot("kullanicilar", user.id, (snap) => {
       if (snap.exists()) {
         const data = snap.data();
         setKullaniciBilgileri({
@@ -241,19 +254,23 @@ function RestoranDetay() {
 
   useEffect(() => {
     if (!aktifSiparisId) return;
-    const unsubSiparis = onSnapshot(doc(db, "siparisler", aktifSiparisId), (s) => {
+    const unsubSiparis = onDocSnapshot("siparisler", aktifSiparisId, (s) => {
       if (s.exists()) setAktifSiparisDurum(s.data().durum);
     });
-    const unsubMsg = onSnapshot(
-      query(collection(db, "siparisler", aktifSiparisId, "mesajlar"), orderBy("tarih", "asc")),
-      (s) => {
-        const msgs = s.docs.map(d => d.data());
-        setChatMesajlari(msgs);
-        if (msgs.length > 0 && msgs[msgs.length - 1].gonderen === "Restoran") {
-          msgRef.current?.play().catch(() => { });
-        }
+
+    // Supabase ile sipariş mesajlarını dinle
+    const unsubMsg = onSnapshot("siparis_mesajlari", (s) => {
+      const msgs = s.docs
+        .filter(d => d.data().siparisId === aktifSiparisId)
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => (a.tarih?.seconds || 0) - (b.tarih?.seconds || 0));
+
+      setChatMesajlari(msgs);
+      if (msgs.length > 0 && msgs[msgs.length - 1].gonderen === "Restoran") {
+        msgRef.current?.play().catch(() => { });
       }
-    );
+    });
+
     return () => { unsubSiparis(); unsubMsg(); };
   }, [aktifSiparisId]);
 
@@ -592,9 +609,8 @@ function RestoranDetay() {
   const toggleFavorite = async () => {
     if (!user) return navigate('/login');
     try {
-      const userRef = doc(db, "kullanicilar", user.uid);
-      if (isFavorite) await updateDoc(userRef, { favoriler: arrayRemove(id) });
-      else await updateDoc(userRef, { favoriler: arrayUnion(id) });
+      if (isFavorite) await arrayRemove("kullanicilar", user.id, "favoriRestoranlar", id);
+      else await arrayUnion("kullanicilar", user.id, "favoriRestoranlar", id);
       setIsFavorite(!isFavorite);
     } catch (err) { console.error('Favori hatası:', err); }
   };
@@ -607,12 +623,11 @@ function RestoranDetay() {
     setKuponHatasi('');
 
     try {
-      const kuponQuery = query(
-        collection(db, "kuponlar"),
-        where("kod", "==", kuponKodu.toUpperCase().trim())
+      const kuponSnap = await getDocs(
+        queryCollection("kuponlar", [
+          { field: "kod", operator: "==", value: kuponKodu.toUpperCase().trim() }
+        ])
       );
-
-      const kuponSnap = await getDocs(kuponQuery);
 
       if (kuponSnap.empty) {
         setKuponHatasi('Geçersiz kupon kodu');
@@ -634,7 +649,7 @@ function RestoranDetay() {
         return;
       }
 
-      if (kupon.maxKullanim && (kupon.kullanilanAdet || 0) >= kupon.maxKullanim) {
+      if (kupon.kullanimLimiti && (kupon.kullanilan || 0) >= kupon.kullanimLimiti) {
         setKuponHatasi('Bu kupon kullanım limitine ulaşmış');
         return;
       }
@@ -715,7 +730,7 @@ function RestoranDetay() {
     // ✅ YENİ: Kullanıcı bilgilerini Firestore'dan çek
     let kullaniciBilgileri = { telefon: '', adSoyad: '' };
     try {
-      const userDoc = await getDoc(doc(db, "kullanicilar", user.uid));
+      const userDoc = await getDoc("kullanicilar", user.id);
       if (userDoc.exists()) {
         const userData = userDoc.data();
         kullaniciBilgileri = {
@@ -728,10 +743,10 @@ function RestoranDetay() {
     }
 
     try {
-      const docRef = await addDoc(collection(db, "siparisler"), {
+      const docRef = await addDoc("siparisler", {
         restoranId: id,
         restoranAd: restoranBilgi.isim,
-        musteriId: user.uid,
+        musteriId: user.id,
         musteriAd: kullaniciBilgileri.adSoyad || user.email,
         musteriEmail: user.email,
 
@@ -772,17 +787,17 @@ function RestoranDetay() {
         puanIndirimi: puanIndirimi,
         kuponKodu: uygulananKupon?.kod || null,
         kuponIndirimi: kuponIndirimi,
-        kazanilacakPuan: kazanilacakPuan
+        kazanilacakPuan: kazanilacakPuan,
+        etaMin: 30, // Varsayılan ETA
+        etaMax: 45  // Varsayılan ETA
       });
 
       // 🆕 PUAN KULLANILDIYSA DÜŞÜR
       if (puanKullan && kullanilacakPuan > 0) {
-        await updateDoc(doc(db, "kullanicilar", user.uid), {
-          puanBakiye: increment(-kullanilacakPuan)
-        });
+        await incrementField("kullanicilar", user.id, "puanBakiye", -kullanilacakPuan);
 
         // Puan harcama geçmişi
-        await addDoc(collection(db, "puan_gecmisi"), {
+        await addDoc("puan_gecmisi", {
           kullaniciId: user.uid,
           tip: 'harcama',
           miktar: kullanilacakPuan,
@@ -792,18 +807,25 @@ function RestoranDetay() {
         });
       }
 
+      // Mesaj başlat
+      await addDoc("siparis_mesajlari", {
+        siparisId: docRef.id,
+        gonderen: "Sistem",
+        mesaj: "Siparişiniz alındı!",
+        tarih: serverTimestamp(),
+        okundu: false
+      });
+
       // 🆕 KUPON KULLANILDIYSA SAYACI ARTIR
       if (uygulananKupon) {
-        await updateDoc(doc(db, "kuponlar", uygulananKupon.id), {
-          kullanilanAdet: increment(1)
-        });
+        await incrementField("kuponlar", uygulananKupon.id, "kullanilan", 1);
       }
 
       // 🆕 KULLANILAN KUPONU KULLANICIDAN SİL (Tek kullanımlık olması için)
       if (uygulananKupon) {
         try {
-          const userRef = doc(db, "kullanicilar", user.uid);
-          const userSnap = await getDoc(userRef);
+          const userRef = user.uid; // user.uid'yi doğrudan kullan
+          const userSnap = await getDoc("kullanicilar", userRef);
           if (userSnap.exists()) {
             const userData = userSnap.data();
             const mevcutKuponlar = userData.kuponlarim || [];
@@ -868,12 +890,13 @@ function RestoranDetay() {
     e.preventDefault();
     if (!yeniMesaj.trim()) return;
 
-    await addDoc(collection(db, "siparisler", aktifSiparisId, "mesajlar"), {
+    await addDoc("siparis_mesajlari", {
+      siparisId: aktifSiparisId,
       gonderen: "Müşteri",
-      gonderenUid: user.uid,
+      gonderenUid: user.id, // uid yerine id
       gonderenEmail: user.email,
       mesaj: yeniMesaj.trim(),
-      tarih: serverTimestamp(), // ✅ Date() yerine serverTimestamp()
+      tarih: serverTimestamp(),
       okundu: false
     });
 
