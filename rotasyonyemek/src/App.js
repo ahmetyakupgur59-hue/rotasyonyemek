@@ -1,6 +1,9 @@
 import React, { useState, useEffect, createContext } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { supabase } from './supabase';
+import Siparislerim from './pages/Siparislerim';
+import MagazaPaneli from './pages/MagazaPaneli';
+import Admin from './pages/Admin';
 
 // Sayfalar
 import AnaSayfa from './pages/AnaSayfa';
@@ -123,6 +126,9 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/restoran/:id" element={<RestoranDetay />} />
             <Route path="/sepet" element={<Sepet />} />
+            <Route path="/siparislerim" element={<Siparislerim />} />
+            <Route path="/magaza-paneli" element={<MagazaPaneli />} />
+            <Route path="/admin" element={<Admin />} />
           </Routes>
         </div>
       </Router>
