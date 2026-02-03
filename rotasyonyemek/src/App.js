@@ -1,138 +1,136 @@
-import React, { useState, useEffect, createContext } from 'react';
+import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { supabase } from './supabase';
-import Siparislerim from './pages/Siparislerim';
-import MagazaPaneli from './pages/MagazaPaneli';
-import Admin from './pages/Admin';
 
-// Sayfalar
-import AnaSayfa from './pages/AnaSayfa';
-import Login from './pages/Login';
-import RestoranDetay from './pages/RestoranDetay';
-import Sepet from './pages/Sepet';
+// Contexts
+import { AuthProvider } from './contexts/AuthContext';
+import { AppProvider } from './contexts/AppContext';
+import { CartProvider } from './contexts/CartContext';
 
-// Context
-export const AppContext = createContext();
+// Layouts
+import MainLayout from './layouts/MainLayout';
+import AdminLayout from './layouts/AdminLayout';
+import RestaurantLayout from './layouts/RestaurantLayout';
+
+// Auth Pages
+import Login from './pages/auth/Login';
+
+// Customer Pages
+import Home from './pages/customer/Home';
+import RestaurantDetail from './pages/customer/RestoranDetay';
+import Cart from './pages/customer/Sepet';
+import Orders from './pages/customer/Siparislerim';
+import Profile from './pages/customer/Profil';
+
+// Admin Pages
+import AdminDashboard from './pages/admin/Admin';
+
+// Restaurant Pages
+import RestaurantDashboard from './pages/restaurant-panel/MagazaPaneli';
+import RestaurantPanel from './pages/restaurant-panel/RestoranPanel';
 
 function App() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // Mevcut oturumu kontrol et
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
-    // Oturum değişikliklerini dinle
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setUser(session?.user ?? null);
-      }
-    );
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  if (loading) {
-    return (
-      <div style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        height: '100vh',
-        fontSize: '24px'
-      }}>
-        ⏳ Yükleniyor...
-      </div>
-    );
-  }
-
   return (
-    <AppContext.Provider value={{ user, setUser }}>
-      <Router>
-        <div style={{
-          minHeight: '100vh',
-          backgroundColor: '#f5f5f5',
-          fontFamily: 'Arial, sans-serif'
-        }}>
-          {/* Üst Menü */}
-          <nav style={{
-            backgroundColor: '#ff6b35',
-            padding: '15px 20px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            color: 'white',
-            position: 'sticky',
-            top: 0,
-            zIndex: 100
-          }}>
-            <a href="/" style={{ 
-              color: 'white', 
-              textDecoration: 'none', 
-              fontSize: '24px', 
-              fontWeight: 'bold' 
-            }}>
-              🍕 RotasyonYemek
-            </a>
-            
-            <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-              <a href="/sepet" style={{ 
-                color: 'white', 
-                textDecoration: 'none',
-                fontSize: '20px'
-              }}>
-                🛒 Sepet
-              </a>
-              
-              {user ? (
-                <button
-                  onClick={async () => {
-                    await supabase.auth.signOut();
-                    setUser(null);
-                  }}
-                  style={{
-                    backgroundColor: 'white',
-                    color: '#ff6b35',
-                    border: 'none',
-                    padding: '8px 16px',
-                    borderRadius: '20px',
-                    cursor: 'pointer',
-                    fontWeight: 'bold'
-                  }}
-                >
-                  Çıkış Yap
-                </button>
-              ) : (
-                <a href="/login" style={{
-                  backgroundColor: 'white',
-                  color: '#ff6b35',
-                  textDecoration: 'none',
-                  padding: '8px 16px',
-                  borderRadius: '20px',
-                  fontWeight: 'bold'
-                }}>
-                  Giriş Yap
-                </a>
-              )}
-            </div>
-          </nav>
-
-          {/* Sayfalar */}
-          <Routes>
-            <Route path="/" element={<AnaSayfa />} />
+    <AuthProvider>
+      <AppProvider>
+        <CartProvider>
+          <Router>
+            <Routes>
+            {/* ==================== AUTH ROUTES ==================== */}
             <Route path="/login" element={<Login />} />
-            <Route path="/restoran/:id" element={<RestoranDetay />} />
-            <Route path="/sepet" element={<Sepet />} />
-            <Route path="/siparislerim" element={<Siparislerim />} />
-            <Route path="/magaza-paneli" element={<MagazaPaneli />} />
-            <Route path="/admin" element={<Admin />} />
-          </Routes>
-        </div>
-      </Router>
-    </AppContext.Provider>
+
+            {/* ==================== CUSTOMER ROUTES ==================== */}
+            <Route path="/" element={
+              <MainLayout>
+                <Home />
+              </MainLayout>
+            } />
+            
+            <Route path="/restoran/:id" element={
+              <MainLayout>
+                <RestaurantDetail />
+              </MainLayout>
+            } />
+            
+            <Route path="/sepet" element={
+              <MainLayout>
+                <Cart />
+              </MainLayout>
+            } />
+            
+            <Route path="/siparislerim" element={
+              <MainLayout>
+                <Orders />
+              </MainLayout>
+            } />
+            
+            <Route path="/profil" element={
+              <MainLayout>
+                <Profile />
+              </MainLayout>
+            } />
+
+            {/* ==================== ADMIN ROUTES ==================== */}
+            <Route path="/admin" element={
+              <AdminLayout>
+                <AdminDashboard />
+              </AdminLayout>
+            } />
+            
+            <Route path="/admin/restaurants" element={
+              <AdminLayout>
+                <AdminDashboard />
+              </AdminLayout>
+            } />
+            
+            <Route path="/admin/users" element={
+              <AdminLayout>
+                <AdminDashboard />
+              </AdminLayout>
+            } />
+            
+            <Route path="/admin/orders" element={
+              <AdminLayout>
+                <AdminDashboard />
+              </AdminLayout>
+            } />
+
+            {/* ==================== RESTAURANT PANEL ROUTES ==================== */}
+            <Route path="/restaurant" element={
+              <RestaurantLayout>
+                <RestaurantDashboard />
+              </RestaurantLayout>
+            } />
+            
+            <Route path="/restaurant/orders" element={
+              <RestaurantLayout>
+                <RestaurantDashboard />
+              </RestaurantLayout>
+            } />
+            
+            <Route path="/restaurant/menu" element={
+              <RestaurantLayout>
+                <RestaurantDashboard />
+              </RestaurantLayout>
+            } />
+            
+            <Route path="/magaza-paneli" element={
+              <RestaurantLayout>
+                <RestaurantDashboard />
+              </RestaurantLayout>
+            } />
+
+            {/* ==================== LEGACY ROUTES (Eski URL'ler için) ==================== */}
+            <Route path="/admin-panel" element={
+              <AdminLayout>
+                <AdminDashboard />
+              </AdminLayout>
+            } />
+
+            </Routes>
+          </Router>
+        </CartProvider>
+      </AppProvider>
+    </AuthProvider>
   );
 }
 

@@ -1,11 +1,11 @@
-import React, { useState, useContext } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../supabase';
-import { AppContext } from '../App';
+import { supabase } from '../../services/supabase';
+import { useAuth } from '../../contexts/AuthContext';
 
 function Login() {
   const navigate = useNavigate();
-  const { user } = useContext(AppContext);
+  const { user } = useAuth();
 
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -44,7 +44,11 @@ function Login() {
 
       if (error) throw error;
 
-      navigate('/');
+      // Küçük bir gecikme ekle (state güncellensin)
+      setTimeout(() => {
+        navigate('/');
+      }, 500);
+
     } catch (error) {
       setError(error.message || 'Giriş başarısız');
     } finally {
@@ -101,7 +105,8 @@ function Login() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: '20px'
+      padding: '20px',
+      backgroundColor: '#f5f5f5'
     }}>
       <div style={{
         backgroundColor: 'white',
@@ -119,7 +124,6 @@ function Login() {
           {isLogin ? '🔐 Giriş Yap' : '📝 Kayıt Ol'}
         </h1>
 
-        {/* Hata Mesajı */}
         {error && (
           <div style={{
             backgroundColor: '#ffe6e6',
@@ -133,7 +137,6 @@ function Login() {
           </div>
         )}
 
-        {/* Başarı Mesajı */}
         {success && (
           <div style={{
             backgroundColor: '#e6ffe6',
@@ -148,7 +151,6 @@ function Login() {
         )}
 
         <form onSubmit={isLogin ? handleLogin : handleRegister}>
-          {/* Kayıt formunda ek alanlar */}
           {!isLogin && (
             <>
               <input
@@ -158,15 +160,7 @@ function Login() {
                 value={form.ad}
                 onChange={handleChange}
                 required
-                style={{
-                  width: '100%',
-                  padding: '14px',
-                  marginBottom: '15px',
-                  borderRadius: '10px',
-                  border: '1px solid #ddd',
-                  fontSize: '16px',
-                  boxSizing: 'border-box'
-                }}
+                style={inputStyle}
               />
               <input
                 type="tel"
@@ -174,15 +168,7 @@ function Login() {
                 placeholder="Telefon (5XX XXX XX XX)"
                 value={form.telefon}
                 onChange={handleChange}
-                style={{
-                  width: '100%',
-                  padding: '14px',
-                  marginBottom: '15px',
-                  borderRadius: '10px',
-                  border: '1px solid #ddd',
-                  fontSize: '16px',
-                  boxSizing: 'border-box'
-                }}
+                style={inputStyle}
               />
             </>
           )}
@@ -194,15 +180,7 @@ function Login() {
             value={form.email}
             onChange={handleChange}
             required
-            style={{
-              width: '100%',
-              padding: '14px',
-              marginBottom: '15px',
-              borderRadius: '10px',
-              border: '1px solid #ddd',
-              fontSize: '16px',
-              boxSizing: 'border-box'
-            }}
+            style={inputStyle}
           />
 
           <input
@@ -213,15 +191,7 @@ function Login() {
             onChange={handleChange}
             required
             minLength={6}
-            style={{
-              width: '100%',
-              padding: '14px',
-              marginBottom: '20px',
-              borderRadius: '10px',
-              border: '1px solid #ddd',
-              fontSize: '16px',
-              boxSizing: 'border-box'
-            }}
+            style={inputStyle}
           />
 
           <button
@@ -243,7 +213,6 @@ function Login() {
           </button>
         </form>
 
-        {/* Geçiş Linki */}
         <p style={{
           textAlign: 'center',
           marginTop: '20px',
@@ -269,5 +238,15 @@ function Login() {
     </div>
   );
 }
+
+const inputStyle = {
+  width: '100%',
+  padding: '14px',
+  marginBottom: '15px',
+  borderRadius: '10px',
+  border: '1px solid #ddd',
+  fontSize: '16px',
+  boxSizing: 'border-box'
+};
 
 export default Login;

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../supabase';
-import { AppContext } from '../App';
+import { supabase } from '../../services/supabase';
+import { AppContext } from '../../contexts/AppContext';
 
 function Siparislerim() {
   const navigate = useNavigate();
