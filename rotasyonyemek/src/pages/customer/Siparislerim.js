@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../services/supabase';
-import { AppContext } from '../../contexts/AppContext';
+import { useApp } from '../../contexts/AppContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 function Siparislerim() {
   const navigate = useNavigate();
-  const { user } = useContext(AppContext);
+  const { user } = useAuth();
 
   const [siparisler, setSiparisler] = useState([]);
   const [loading, setLoading] = useState(true);

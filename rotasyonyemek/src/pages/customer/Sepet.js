@@ -1,11 +1,13 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../services/supabase';
-import { AppContext } from '../../contexts/AppContext';
+import { useApp } from '../../contexts/AppContext';
+import { useCart } from '../../contexts/CartContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 function Sepet() {
   const navigate = useNavigate();
-  const { user } = useContext(AppContext);
+  const { user } = useAuth();
 
   const [sepetData, setSepetData] = useState(null);
   const [adres, setAdres] = useState('');

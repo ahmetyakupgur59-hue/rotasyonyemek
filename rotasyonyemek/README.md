@@ -1,70 +1,126 @@
-# Getting Started with Create React App
+# 🍽️ RotasyonYemek Frontend - React Uygulaması
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+**Ana Proje Belgesine Dönüş**: Lütfen kök dizindeki [../README.md](../README.md) dosyasını teknoloji yığını, kurulum, API şeması ve detaylı komponentler için kontrol edin.
 
-## Available Scripts
+---
 
-In the project directory, you can run:
+## 📘 Hızlı Başlangıç
 
-### `npm start`
+### Komutlar
+```bash
+# Bağımlılıkları yükle
+npm install
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+# Geliştirme sunucusunu başlat (http://localhost:3000)
+npm start
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+# Testleri çalıştır
+npm test
 
-### `npm test`
+# Üretim derlemesi oluştur
+npm run build
+```
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+---
 
-### `npm run build`
+## 📁 Klasör Yapısı
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+```
+src/
+├── components/          # Tekrar kullabilir React bileşenleri
+├── contexts/           # State yönetimi (Auth, Cart, App)
+├── layouts/            # Sayfa şablonları (Main, Admin, Restaurant)
+├── pages/              # Tam sayfalar
+│   ├── auth/          # Kimlik doğrulama sayfaları
+│   ├── customer/      # Müşteri portalı sayfaları
+│   ├── admin/         # Admin paneli
+│   └── restaurant-panel/ # Restoran sahiplerine yönelik paneli
+├── services/           # API ve dış servisler (Supabase, EmailJS)
+├── styles/             # CSS dosyaları
+├── assets/             # Resimler ve statik dosyalar
+├── App.js              # Ana uygulama bileşeni
+└── index.js            # React entry point
+```
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+---
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+## 🔑 Önemli Dosyalar ve Bileşenler
 
-### `npm run eject`
+| Dosya | Açıklama |
+|-------|----------|
+| `src/App.js` | Rotaları ve layout'ları tanımla |
+| `src/contexts/AuthContext.js` | Kimlik doğrulama ve rol yönetimi |
+| `src/contexts/CartContext.js` | Alışveriş sepeti yönetimi |
+| `src/contexts/AppContext.js` | Global uygulama state'i |
+| `src/services/supabase.js` | Supabase client setup |
+| `src/services/emailService.js` | EmailJS entegrasyonu |
+| `src/pages/admin/Admin.js` | Admin paneli ana sayfası |
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+---
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+## 🧩 Context Hooks Kullanımı
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+### AuthContext
+```javascript
+import { useAuth } from './contexts/AuthContext'
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+const { user, userRole, loading, isAdmin, isRestoran } = useAuth()
+```
 
-## Learn More
+### CartContext
+```javascript
+import { useCart } from './contexts/CartContext'
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+const { cart, addToCart, removeFromCart, clearCart } = useCart()
+```
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+### AppContext
+```javascript
+import { useApp } from './contexts/AppContext'
 
-### Code Splitting
+const { user, userRole, isAdmin } = useApp()
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+---
 
-### Analyzing the Bundle Size
+## 📄 Sayfa Detayları
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+Ana dokümantasyonda aşağıdaki sayfaların detaylı açıklamaları vardır:
 
-### Making a Progressive Web App
+### Müşteri Portalı
+- **Home.js** - Restoran listesi ve filtreleme
+- **RestoranDetay.js** - Restoran bilgisi ve menü
+- **Sepet.js** - Alışveriş sepeti ve siparış
+- **Siparislerim.js** - Siparış takibi
+- **Profil.js** - Kişisel bilgiler ve adres yönetimi
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+### Admin Paneli
+- **Admin.js** - Genel yönetim (Dashboard, Restoranlar, Kullanıcılar vb.)
 
-### Advanced Configuration
+### Common Bileşenler
+- **LoadingSpinner** - Yükleme göstergesi
+- **EmptyState** - Boş durumu gösterme
+- **StatusBadge** - Durum etiketleri
+- **Modal** - İletişim kutuları
+- **Pagination** - Sayfalandırma
+- **Toast** - Bildirim mesajları
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+---
 
-### Deployment
+## 🚀 Daha Fazla Bilgi
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+Detaylı dokümantasyon için ana README.md'ye bakın:
+- ✅ Tam teknoloji yığını
+- ✅ Supabase veritabanı şeması (11+ tablo)
+- ✅ Her sayfa için state yapısı ve context kullanımı
+- ✅ Supabase sorgusu örnekleri
+- ✅ Bileşen hiyerarşileri
+- ✅ Common UI bileşenleri detayları
+- ✅ Kurulum adım adım
+- ✅ API endpoint örnekleri
+- ✅ Rol tabanlı erişim kontrolü
+- ✅ Geliştirme notları ve sorun çözümü
 
-### `npm run build` fails to minify
+**Versiyon**: 3.0
+**Son Güncelleme**: Şubat 2026
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)

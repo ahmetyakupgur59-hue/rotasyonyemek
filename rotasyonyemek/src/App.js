@@ -13,6 +13,8 @@ import RestaurantLayout from './layouts/RestaurantLayout';
 
 // Auth Pages
 import Login from './pages/auth/Login';
+import ForgotPassword from './pages/auth/ForgotPassword';
+import ResetPassword from './pages/auth/ResetPassword';
 
 // Customer Pages
 import Home from './pages/customer/Home';
@@ -37,6 +39,8 @@ function App() {
             <Routes>
             {/* ==================== AUTH ROUTES ==================== */}
             <Route path="/login" element={<Login />} />
+            <Route path="/sifremi-unuttum" element={<ForgotPassword />} />
+            <Route path="/sifre-sifirla" element={<ResetPassword />} />
 
             {/* ==================== CUSTOMER ROUTES ==================== */}
             <Route path="/" element={

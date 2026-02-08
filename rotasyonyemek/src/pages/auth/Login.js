@@ -1,14 +1,13 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { supabase } from '../../services/supabase';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
 function Login() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, userRole, loading, login, register } = useAuth();
 
   const [isLogin, setIsLogin] = useState(true);
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -19,11 +18,18 @@ function Login() {
     telefon: ''
   });
 
-  // Zaten giriş yaptıysa ana sayfaya yönlendir
-  if (user) {
-    navigate('/');
-    return null;
-  }
+  // Kullanıcı giriş yaptıysa yönlendir
+  useEffect(() => {
+    if (!loading && user && userRole) {
+      if (userRole === 'admin') {
+        navigate('/admin');
+      } else if (userRole === 'restoran') {
+        navigate('/restoran-panel');
+      } else {
+        navigate('/');
+      }
+    }
+  }, [user, userRole, loading, navigate]);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -33,75 +39,86 @@ function Login() {
   // Giriş Yap
   const handleLogin = async (e) => {
     e.preventDefault();
-    setLoading(true);
+    
+    if (submitting) return;
+    
+    setSubmitting(true);
     setError('');
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: form.email,
-        password: form.password
-      });
-
-      if (error) throw error;
-
-      // Küçük bir gecikme ekle (state güncellensin)
-      setTimeout(() => {
-        navigate('/');
-      }, 500);
-
+      await login(form.email, form.password);
     } catch (error) {
-      setError(error.message || 'Giriş başarısız');
-    } finally {
-      setLoading(false);
+      if (error.message.includes('Invalid login credentials')) {
+        setError('E-posta veya şifre hatalı');
+      } else if (error.message.includes('Email not confirmed')) {
+        setError('E-posta adresiniz doğrulanmamış');
+      } else {
+        setError(error.message || 'Giriş başarısız');
+      }
+      setSubmitting(false);
     }
   };
 
   // Kayıt Ol
   const handleRegister = async (e) => {
     e.preventDefault();
-    setLoading(true);
+    
+    if (submitting) return;
+    
+    setSubmitting(true);
     setError('');
 
     try {
-      // 1. Auth'a kayıt
-      const { data, error } = await supabase.auth.signUp({
-        email: form.email,
-        password: form.password
+      await register(form.email, form.password, {
+        ad: form.ad,
+        telefon: form.telefon
       });
-
-      if (error) throw error;
-
-      // 2. Kullanıcı tablosuna ekle
-      if (data.user) {
-        const { error: dbError } = await supabase
-          .from('kullanicilar')
-          .insert([{
-            id: data.user.id,
-            email: form.email,
-            ad: form.ad,
-            telefon: form.telefon,
-            rol: 'musteri'
-          }]);
-
-        if (dbError) {
-          console.error('Kullanıcı kayıt hatası:', dbError);
-        }
-      }
 
       setSuccess('Kayıt başarılı! Giriş yapabilirsiniz.');
       setIsLogin(true);
       setForm({ ...form, password: '' });
+      setSubmitting(false);
 
     } catch (error) {
-      setError(error.message || 'Kayıt başarısız');
-    } finally {
-      setLoading(false);
+      if (error.message.includes('already registered')) {
+        setError('Bu e-posta adresi zaten kayıtlı');
+      } else {
+        setError(error.message || 'Kayıt başarısız');
+      }
+      setSubmitting(false);
     }
+  };
+
+  // Loading durumu
+  if (loading) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '40px', marginBottom: '16px' }}>⏳</div>
+          <p>Yükleniyor...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const inputStyle = {
+    width: '100%',
+    padding: '12px 14px',
+    borderRadius: '8px',
+    border: '1px solid #ddd',
+    fontSize: '15px',
+    boxSizing: 'border-box',
+    marginBottom: '16px'
   };
 
   return (
     <div style={{
-      minHeight: 'calc(100vh - 60px)',
+      minHeight: 'calc(100vh - 70px)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -116,37 +133,48 @@ function Login() {
         maxWidth: '400px',
         boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
       }}>
+        {/* Logo */}
+        <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+          <span style={{ fontSize: '48px' }}>🍽️</span>
+          <h2 style={{ margin: '8px 0 0', color: '#d32f2f', fontWeight: 'bold' }}>
+            RotasyonYemek
+          </h2>
+        </div>
+
         <h1 style={{
           textAlign: 'center',
           marginBottom: '30px',
-          color: '#333'
+          color: '#333',
+          fontSize: '24px'
         }}>
           {isLogin ? '🔐 Giriş Yap' : '📝 Kayıt Ol'}
         </h1>
 
         {error && (
           <div style={{
-            backgroundColor: '#ffe6e6',
-            color: '#cc0000',
-            padding: '12px',
+            backgroundColor: '#ffebee',
+            color: '#c62828',
+            padding: '12px 16px',
             borderRadius: '8px',
             marginBottom: '20px',
-            textAlign: 'center'
+            textAlign: 'center',
+            fontSize: '14px'
           }}>
-            {error}
+            ❌ {error}
           </div>
         )}
 
         {success && (
           <div style={{
-            backgroundColor: '#e6ffe6',
-            color: '#008000',
-            padding: '12px',
+            backgroundColor: '#e8f5e9',
+            color: '#2e7d32',
+            padding: '12px 16px',
             borderRadius: '8px',
             marginBottom: '20px',
-            textAlign: 'center'
+            textAlign: 'center',
+            fontSize: '14px'
           }}>
-            {success}
+            ✅ {success}
           </div>
         )}
 
@@ -196,40 +224,40 @@ function Login() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={submitting}
             style={{
               width: '100%',
               padding: '14px',
-              backgroundColor: loading ? '#ccc' : '#ff6b35',
+              backgroundColor: submitting ? '#bdbdbd' : '#d32f2f',
               color: 'white',
               border: 'none',
               borderRadius: '10px',
               fontSize: '16px',
               fontWeight: 'bold',
-              cursor: loading ? 'not-allowed' : 'pointer'
+              cursor: submitting ? 'not-allowed' : 'pointer'
             }}
           >
-            {loading ? '⏳ Bekleyin...' : (isLogin ? 'Giriş Yap' : 'Kayıt Ol')}
+            {submitting ? '⏳ Bekleyin...' : (isLogin ? '🔐 Giriş Yap' : '📝 Kayıt Ol')}
           </button>
         </form>
 
-        <p style={{
-          textAlign: 'center',
-          marginTop: '20px',
-          color: '#666'
-        }}>
-          {isLogin ? 'Hesabın yok mu? ' : 'Zaten hesabın var mı? '}
+        {isLogin && (
+          <p style={{ textAlign: 'center', marginTop: '16px' }}>
+            <Link to="/sifremi-unuttum" style={{ color: '#666', textDecoration: 'none', fontSize: '14px' }}>
+              🔑 Şifremi Unuttum
+            </Link>
+          </p>
+        )}
+
+        <p style={{ textAlign: 'center', marginTop: '20px', color: '#666' }}>
+          {isLogin ? 'Hesabınız yok mu? ' : 'Zaten hesabınız var mı? '}
           <span
             onClick={() => {
               setIsLogin(!isLogin);
               setError('');
               setSuccess('');
             }}
-            style={{
-              color: '#ff6b35',
-              cursor: 'pointer',
-              fontWeight: 'bold'
-            }}
+            style={{ color: '#d32f2f', cursor: 'pointer', fontWeight: 'bold' }}
           >
             {isLogin ? 'Kayıt Ol' : 'Giriş Yap'}
           </span>
@@ -238,15 +266,5 @@ function Login() {
     </div>
   );
 }
-
-const inputStyle = {
-  width: '100%',
-  padding: '14px',
-  marginBottom: '15px',
-  borderRadius: '10px',
-  border: '1px solid #ddd',
-  fontSize: '16px',
-  boxSizing: 'border-box'
-};
 
 export default Login;

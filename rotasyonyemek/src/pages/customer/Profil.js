@@ -6,6 +6,39 @@ export default function Profile() {
   const [error, setError] = useState("");
   const [authUser, setAuthUser] = useState(null);
   const [dbUser, setDbUser] = useState(null);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordMessage, setPasswordMessage] = useState("");
+
+  // Şifre Güncelleme Fonksiyonu
+  const updateMyPassword = async (newPassword) => {
+    if (!newPassword || newPassword.length < 6) {
+      setPasswordMessage("❌ Şifre en az 6 karakter olmalıdır");
+      return;
+    }
+
+    try {
+      setPasswordLoading(true);
+      setPasswordMessage("");
+
+      // eslint-disable-next-line no-unused-vars
+      const { data, error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (error) {
+        console.error("Şifre güncelleme hatası:", error);
+        setPasswordMessage("❌ Şifre güncellenirken hata oluştu: " + error.message);
+      } else {
+        console.log("✅ Şifre başarıyla güncellendi!");
+        setPasswordMessage("✅ Şifreniz güncellendi!");
+      }
+    } catch (e) {
+      console.error("Beklenmeyen hata:", e);
+      setPasswordMessage("❌ Bir hata oluştu");
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -105,6 +138,11 @@ export default function Profile() {
 
       <hr style={{ margin: "16px 0" }} />
 
+      <h3>Şifre Değiştir</h3>
+      <PasswordChangeForm onSubmit={updateMyPassword} loading={passwordLoading} message={passwordMessage} />
+
+      <hr style={{ margin: "16px 0" }} />
+
       <h3>Veritabanı Kullanıcı Kaydı (kullanicilar)</h3>
 
       {dbUser ? (
@@ -135,5 +173,109 @@ export default function Profile() {
         <p>kullanicilar tablosunda kayıt bulunamadı.</p>
       )}
     </div>
+  );
+}
+
+// Şifre Değiştirme Form Komponenti
+function PasswordChangeForm({ onSubmit, loading, message }) {
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+
+    if (!newPassword || !confirmPassword) {
+      alert("Tüm alanları doldurun");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      alert("Şifreler eşleşmiyor");
+      return;
+    }
+
+    onSubmit(newPassword);
+    setNewPassword("");
+    setConfirmPassword("");
+  };
+
+  return (
+    <form onSubmit={handleSubmit} style={{ marginTop: 12 }}>
+      <div style={{ marginBottom: 12 }}>
+        <label htmlFor="newPassword" style={{ display: "block", marginBottom: 4 }}>
+          Yeni Şifre:
+        </label>
+        <input
+          id="newPassword"
+          type="password"
+          placeholder="Min 6 karakter"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          disabled={loading}
+          style={{
+            width: "100%",
+            padding: "8px",
+            borderRadius: "4px",
+            border: "1px solid #ccc",
+            fontSize: "14px",
+            boxSizing: "border-box"
+          }}
+        />
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <label htmlFor="confirmPassword" style={{ display: "block", marginBottom: 4 }}>
+          Şifreyi Onayla:
+        </label>
+        <input
+          id="confirmPassword"
+          type="password"
+          placeholder="Şifreyi tekrar girin"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          disabled={loading}
+          style={{
+            width: "100%",
+            padding: "8px",
+            borderRadius: "4px",
+            border: "1px solid #ccc",
+            fontSize: "14px",
+            boxSizing: "border-box"
+          }}
+        />
+      </div>
+
+      <button
+        type="submit"
+        disabled={loading}
+        style={{
+          padding: "10px 20px",
+          backgroundColor: loading ? "#ccc" : "#ff6b35",
+          color: "white",
+          border: "none",
+          borderRadius: "4px",
+          cursor: loading ? "not-allowed" : "pointer",
+          fontSize: "14px",
+          fontWeight: "bold"
+        }}
+      >
+        {loading ? "⏳ Güncelleniyor..." : "Şifreyi Güncelle"}
+      </button>
+
+      {message && (
+        <div
+          style={{
+            marginTop: 12,
+            padding: "10px",
+            borderRadius: "4px",
+            backgroundColor: message.includes("✅") ? "#e6ffe6" : "#ffe6e6",
+            color: message.includes("✅") ? "#008000" : "#cc0000",
+            fontSize: "14px"
+          }}
+        >
+          {message}
+        </div>
+      )}
+    </form>
   );
 }
