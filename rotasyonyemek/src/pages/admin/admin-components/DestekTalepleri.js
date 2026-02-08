@@ -3,36 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../../services/supabase';
 import LoadingSpinner from './common/LoadingSpinner';
 import Pagination from './common/Pagination';
-import Modal from './common/Modal';
-import { 
-    Headphones, 
-    Search, 
-    Filter, 
-    Plus,
-    MessageSquare,
-    User,
-    Clock,
-    AlertCircle,
-    CheckCircle,
-    XCircle,
-    Eye,
-    Send,
-    ChevronDown,
-    Phone,
-    Mail,
-    Tag,
-    RefreshCw,
-    MoreVertical,
-    Inbox,
-    AlertTriangle,
-    Timer,
-    UserCheck,
-    FileText,
-    Paperclip,
-    ArrowRight,
-    Store,
-    ShoppingBag
-} from 'lucide-react';
+import { useToast } from './common/Toast';
 
 const DestekTalepleri = () => {
     const [talepler, setTalepler] = useState([]);
@@ -52,45 +23,44 @@ const DestekTalepleri = () => {
         oncelik: '',
         search: ''
     });
-    const [showFilters, setShowFilters] = useState(false);
     const [stats, setStats] = useState({
         toplam: 0,
         acik: 0,
         beklemede: 0,
         cozuldu: 0
     });
+    const toast = useToast();
 
     const ITEMS_PER_PAGE = 15;
 
     // Kategoriler
     const kategoriler = [
-        { value: 'siparis', label: 'Sipariş', icon: ShoppingBag, color: 'blue' },
-        { value: 'restoran', label: 'Restoran', icon: Store, color: 'purple' },
-        { value: 'odeme', label: 'Ödeme', icon: Tag, color: 'green' },
-        { value: 'teknik', label: 'Teknik', icon: AlertCircle, color: 'orange' },
-        { value: 'oneri', label: 'Öneri', icon: MessageSquare, color: 'teal' },
-        { value: 'sikayet', label: 'Şikayet', icon: AlertTriangle, color: 'red' },
-        { value: 'diger', label: 'Diğer', icon: FileText, color: 'gray' }
+        { value: 'siparis', label: 'Sipariş', icon: '📦', color: '#3b82f6' },
+        { value: 'restoran', label: 'Restoran', icon: '🏪', color: '#8b5cf6' },
+        { value: 'odeme', label: 'Ödeme', icon: '💳', color: '#10b981' },
+        { value: 'teknik', label: 'Teknik', icon: '🔧', color: '#f59e0b' },
+        { value: 'oneri', label: 'Öneri', icon: '💡', color: '#14b8a6' },
+        { value: 'sikayet', label: 'Şikayet', icon: '😤', color: '#ef4444' },
+        { value: 'diger', label: 'Diğer', icon: '📝', color: '#6b7280' }
     ];
 
     // Öncelikler
     const oncelikler = [
-        { value: 'dusuk', label: 'Düşük', color: 'gray' },
-        { value: 'normal', label: 'Normal', color: 'blue' },
-        { value: 'yuksek', label: 'Yüksek', color: 'orange' },
-        { value: 'acil', label: 'Acil', color: 'red' }
+        { value: 'dusuk', label: 'Düşük', color: '#6b7280' },
+        { value: 'normal', label: 'Normal', color: '#3b82f6' },
+        { value: 'yuksek', label: 'Yüksek', color: '#f59e0b' },
+        { value: 'acil', label: 'Acil', color: '#ef4444' }
     ];
 
     // Durumlar
     const durumlar = [
-        { value: 'acik', label: 'Açık', color: 'blue', icon: Inbox },
-        { value: 'inceleniyor', label: 'İnceleniyor', color: 'yellow', icon: Eye },
-        { value: 'beklemede', label: 'Beklemede', color: 'orange', icon: Timer },
-        { value: 'cozuldu', label: 'Çözüldü', color: 'green', icon: CheckCircle },
-        { value: 'kapali', label: 'Kapalı', color: 'gray', icon: XCircle }
+        { value: 'acik', label: 'Açık', icon: '📬', color: '#3b82f6', bg: '#dbeafe' },
+        { value: 'inceleniyor', label: 'İnceleniyor', icon: '👀', color: '#f59e0b', bg: '#fef3c7' },
+        { value: 'beklemede', label: 'Beklemede', icon: '⏳', color: '#f97316', bg: '#ffedd5' },
+        { value: 'cozuldu', label: 'Çözüldü', icon: '✅', color: '#10b981', bg: '#d1fae5' },
+        { value: 'kapali', label: 'Kapalı', icon: '🔒', color: '#6b7280', bg: '#f3f4f6' }
     ];
 
-    // Verileri yükle
     useEffect(() => {
         fetchTalepler();
         fetchStats();
@@ -105,7 +75,6 @@ const DestekTalepleri = () => {
                 .select('*', { count: 'exact' })
                 .order('created_at', { ascending: false });
 
-            // Filtreler
             if (filters.durum) query = query.eq('durum', filters.durum);
             if (filters.kategori) query = query.eq('kategori', filters.kategori);
             if (filters.oncelik) query = query.eq('oncelik', filters.oncelik);
@@ -113,7 +82,6 @@ const DestekTalepleri = () => {
                 query = query.or(`talep_no.ilike.%${filters.search}%,konu.ilike.%${filters.search}%,kullanici_email.ilike.%${filters.search}%`);
             }
 
-            // Pagination
             const from = (currentPage - 1) * ITEMS_PER_PAGE;
             const to = from + ITEMS_PER_PAGE - 1;
             query = query.range(from, to);
@@ -126,6 +94,7 @@ const DestekTalepleri = () => {
             setTotalPages(Math.ceil((count || 0) / ITEMS_PER_PAGE));
         } catch (error) {
             console.error('Talepler yüklenirken hata:', error);
+            toast.error('Talepler yüklenirken hata oluştu');
         } finally {
             setLoading(false);
         }
@@ -224,12 +193,10 @@ const DestekTalepleri = () => {
         }
     };
 
-    // Hazır cevap kullan
-    const applyHazirCevap = async (cevap) => {
+    const useHazirCevap = async (cevap) => {
         setYeniMesaj(cevap.icerik);
         setShowHazirCevaplar(false);
 
-        // Kullanım sayısını artır
         await supabase
             .from('hazir_cevaplar')
             .update({ kullanim_sayisi: (cevap.kullanim_sayisi || 0) + 1 })
@@ -291,6 +258,7 @@ const DestekTalepleri = () => {
         }).format(date);
     };
 
+
     // Kategori bilgisi
     const getKategoriInfo = (kategori) => {
         return kategoriler.find(k => k.value === kategori) || kategoriler[6];
@@ -312,467 +280,648 @@ const DestekTalepleri = () => {
         setCurrentPage(1);
     };
 
+    const StatCard = ({ icon, title, value, color, onClick }) => (
+        <div 
+            style={{ ...styles.card, cursor: onClick ? 'pointer' : 'default' }}
+            onClick={onClick}
+        >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <div style={{
+                    width: '48px',
+                    height: '48px',
+                    backgroundColor: `${color}20`,
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '24px'
+                }}>
+                    {icon}
+                </div>
+                <div>
+                    <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>{title}</p>
+                    <p style={{ margin: '4px 0 0', fontSize: '28px', fontWeight: '700', color }}>
+                        {value}
+                    </p>
+                </div>
+            </div>
+        </div>
+    );
+
     return (
-        <div className="space-y-6">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             {/* Header */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                        <div className="p-3 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl">
-                            <Headphones className="h-6 w-6 text-white" />
+            <div style={styles.card}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                        <div style={{
+                            width: '56px',
+                            height: '56px',
+                            background: 'linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)',
+                            borderRadius: '16px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '28px'
+                        }}>
+                            🎧
                         </div>
                         <div>
-                            <h1 className="text-2xl font-bold text-gray-800">Destek Talepleri</h1>
-                            <p className="text-gray-600">Müşteri ve restoran destek taleplerini yönetin</p>
+                            <h1 style={{ margin: 0, fontSize: '24px', fontWeight: '700', color: '#1e293b' }}>
+                                Destek Talepleri
+                            </h1>
+                            <p style={{ margin: '4px 0 0', fontSize: '14px', color: '#64748b' }}>
+                                Müşteri ve restoran destek taleplerini yönetin
+                            </p>
                         </div>
                     </div>
                     <button
-                        onClick={fetchTalepler}
-                        className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                        onClick={() => { fetchTalepler(); fetchStats(); }}
+                        style={{ ...styles.button, backgroundColor: '#f1f5f9', color: '#475569' }}
                     >
-                        <RefreshCw className="h-4 w-4" />
-                        Yenile
+                        🔄 Yenile
                     </button>
                 </div>
             </div>
 
-            {/* İstatistik Kartları */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-blue-100 rounded-lg">
-                            <Inbox className="h-5 w-5 text-blue-600" />
-                        </div>
-                        <div>
-                            <p className="text-sm text-gray-600">Toplam Talep</p>
-                            <p className="text-2xl font-bold text-gray-800">{stats.toplam}</p>
-                        </div>
-                    </div>
-                </div>
-                <div 
+            {/* İstatistikler */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
+                <StatCard icon="📬" title="Toplam Talep" value={stats.toplam} color="#3b82f6" />
+                <StatCard 
+                    icon="🔔" 
+                    title="Açık" 
+                    value={stats.acik} 
+                    color="#3b82f6"
                     onClick={() => setFilters({ ...filters, durum: 'acik' })}
-                    className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 cursor-pointer hover:border-blue-300 transition-colors"
-                >
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-blue-100 rounded-lg">
-                            <AlertCircle className="h-5 w-5 text-blue-600" />
-                        </div>
-                        <div>
-                            <p className="text-sm text-gray-600">Açık</p>
-                            <p className="text-2xl font-bold text-blue-600">{stats.acik}</p>
-                        </div>
-                    </div>
-                </div>
-                <div 
+                />
+                <StatCard 
+                    icon="⏳" 
+                    title="Beklemede" 
+                    value={stats.beklemede} 
+                    color="#f97316"
                     onClick={() => setFilters({ ...filters, durum: 'beklemede' })}
-                    className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 cursor-pointer hover:border-orange-300 transition-colors"
-                >
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-orange-100 rounded-lg">
-                            <Timer className="h-5 w-5 text-orange-600" />
-                        </div>
-                        <div>
-                            <p className="text-sm text-gray-600">Beklemede</p>
-                            <p className="text-2xl font-bold text-orange-600">{stats.beklemede}</p>
-                        </div>
-                    </div>
-                </div>
-                <div 
+                />
+                <StatCard 
+                    icon="✅" 
+                    title="Çözüldü" 
+                    value={stats.cozuldu} 
+                    color="#10b981"
                     onClick={() => setFilters({ ...filters, durum: 'cozuldu' })}
-                    className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 cursor-pointer hover:border-green-300 transition-colors"
-                >
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-green-100 rounded-lg">
-                            <CheckCircle className="h-5 w-5 text-green-600" />
-                        </div>
-                        <div>
-                            <p className="text-sm text-gray-600">Çözüldü</p>
-                            <p className="text-2xl font-bold text-green-600">{stats.cozuldu}</p>
-                        </div>
-                    </div>
-                </div>
+                />
             </div>
 
             {/* Filtreler */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-                <div className="flex flex-col md:flex-row gap-4">
-                    {/* Arama */}
-                    <div className="flex-1 relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+            <div style={styles.card}>
+                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: '200px' }}>
                         <input
                             type="text"
                             value={filters.search}
                             onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                            placeholder="Talep no, konu veya email ara..."
-                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                            placeholder="🔍 Talep no, konu veya email ara..."
+                            style={styles.input}
                         />
                     </div>
-
-                    {/* Hızlı Filtreler */}
                     <select
                         value={filters.durum}
                         onChange={(e) => setFilters({ ...filters, durum: e.target.value })}
-                        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                        style={{ ...styles.input, width: '160px' }}
                     >
                         <option value="">Tüm Durumlar</option>
                         {durumlar.map(d => (
-                            <option key={d.value} value={d.value}>{d.label}</option>
+                            <option key={d.value} value={d.value}>{d.icon} {d.label}</option>
                         ))}
                     </select>
-
                     <select
                         value={filters.kategori}
                         onChange={(e) => setFilters({ ...filters, kategori: e.target.value })}
-                        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                        style={{ ...styles.input, width: '160px' }}
                     >
                         <option value="">Tüm Kategoriler</option>
                         {kategoriler.map(k => (
-                            <option key={k.value} value={k.value}>{k.label}</option>
+                            <option key={k.value} value={k.value}>{k.icon} {k.label}</option>
                         ))}
                     </select>
-
                     <select
                         value={filters.oncelik}
                         onChange={(e) => setFilters({ ...filters, oncelik: e.target.value })}
-                        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                        style={{ ...styles.input, width: '150px' }}
                     >
                         <option value="">Tüm Öncelikler</option>
                         {oncelikler.map(o => (
                             <option key={o.value} value={o.value}>{o.label}</option>
                         ))}
                     </select>
-
                     {(filters.durum || filters.kategori || filters.oncelik || filters.search) && (
-                        <button
-                            onClick={clearFilters}
-                            className="flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        <button 
+                            onClick={clearFilters} 
+                            style={{ ...styles.button, backgroundColor: '#fee2e2', color: '#ef4444' }}
                         >
-                            <XCircle className="h-4 w-4" />
-                            Temizle
+                            ✕ Temizle
                         </button>
                     )}
                 </div>
             </div>
 
             {/* Talep Listesi */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div style={styles.card}>
                 {loading ? (
                     <LoadingSpinner message="Talepler yükleniyor..." />
                 ) : talepler.length === 0 ? (
-                    <div className="text-center py-12">
-                        <Headphones className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                        <h3 className="text-lg font-medium text-gray-900">Talep bulunamadı</h3>
-                        <p className="text-gray-500 mt-1">Henüz destek talebi yok veya filtreleri değiştirin</p>
+                    <div style={{ textAlign: 'center', padding: '48px', color: '#94a3b8' }}>
+                        <span style={{ fontSize: '64px', display: 'block', marginBottom: '16px' }}>🎧</span>
+                        <h3 style={{ margin: 0, fontSize: '18px', color: '#1e293b' }}>Talep bulunamadı</h3>
+                        <p style={{ margin: '8px 0 0', fontSize: '14px' }}>Henüz destek talebi yok veya filtreleri değiştirin</p>
                     </div>
                 ) : (
-                    <div className="divide-y divide-gray-200">
-                        {talepler.map((talep) => {
-                            const kategoriInfo = getKategoriInfo(talep.kategori);
-                            const oncelikInfo = getOncelikInfo(talep.oncelik);
-                            const durumInfo = getDurumInfo(talep.durum);
-                            const KategoriIcon = kategoriInfo.icon;
-                            const DurumIcon = durumInfo.icon;
+                    <>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            {talepler.map((talep) => {
+                                const kategoriInfo = getKategoriInfo(talep.kategori);
+                                const oncelikInfo = getOncelikInfo(talep.oncelik);
+                                const durumInfo = getDurumInfo(talep.durum);
 
-                            return (
-                                <div 
-                                    key={talep.id}
-                                    onClick={() => openTalepDetail(talep)}
-                                    className={`p-4 hover:bg-gray-50 cursor-pointer transition-colors ${
-                                        talep.durum === 'acik' ? 'bg-blue-50/50' : ''
-                                    } ${talep.oncelik === 'acil' ? 'border-l-4 border-red-500' : ''}`}
-                                >
-                                    <div className="flex items-start gap-4">
-                                        {/* Sol: İkon */}
-                                        <div className={`p-2 rounded-lg bg-${kategoriInfo.color}-100 flex-shrink-0`}>
-                                            <KategoriIcon className={`h-5 w-5 text-${kategoriInfo.color}-600`} />
+                                return (
+                                    <div 
+                                        key={talep.id}
+                                        onClick={() => openTalepDetail(talep)}
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'flex-start',
+                                            gap: '16px',
+                                            padding: '16px',
+                                            borderRadius: '12px',
+                                            border: `2px solid ${talep.durum === 'acik' ? '#bfdbfe' : '#f1f5f9'}`,
+                                            backgroundColor: talep.durum === 'acik' ? '#eff6ff' : '#fafafa',
+                                            cursor: 'pointer',
+                                            transition: 'all 0.2s',
+                                            borderLeft: talep.oncelik === 'acil' ? '4px solid #ef4444' : undefined
+                                        }}
+                                    >
+                                        {/* İkon */}
+                                        <div style={{
+                                            width: '44px',
+                                            height: '44px',
+                                            backgroundColor: `${kategoriInfo.color}20`,
+                                            borderRadius: '12px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: '20px',
+                                            flexShrink: 0
+                                        }}>
+                                            {kategoriInfo.icon}
                                         </div>
 
-                                        {/* Orta: İçerik */}
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <span className="text-sm font-mono text-gray-500">{talep.talep_no}</span>
-                                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-${durumInfo.color}-100 text-${durumInfo.color}-700`}>
-                                                    <DurumIcon className="h-3 w-3" />
-                                                    {durumInfo.label}
+                                        {/* İçerik */}
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '6px' }}>
+                                                <span style={{ 
+                                                    fontSize: '12px', 
+                                                    fontFamily: 'monospace', 
+                                                    color: '#64748b',
+                                                    backgroundColor: '#f1f5f9',
+                                                    padding: '2px 8px',
+                                                    borderRadius: '4px'
+                                                }}>
+                                                    {talep.talep_no}
                                                 </span>
-                                                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-${oncelikInfo.color}-100 text-${oncelikInfo.color}-700`}>
+                                                <span style={{
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '4px',
+                                                    padding: '3px 10px',
+                                                    borderRadius: '6px',
+                                                    backgroundColor: durumInfo.bg,
+                                                    color: durumInfo.color,
+                                                    fontSize: '11px',
+                                                    fontWeight: '600'
+                                                }}>
+                                                    {durumInfo.icon} {durumInfo.label}
+                                                </span>
+                                                <span style={{
+                                                    padding: '3px 10px',
+                                                    borderRadius: '6px',
+                                                    backgroundColor: `${oncelikInfo.color}20`,
+                                                    color: oncelikInfo.color,
+                                                    fontSize: '11px',
+                                                    fontWeight: '600'
+                                                }}>
                                                     {oncelikInfo.label}
                                                 </span>
                                             </div>
-                                            <h3 className="font-medium text-gray-900 truncate">{talep.konu}</h3>
-                                            <p className="text-sm text-gray-500 truncate mt-1">{talep.mesaj}</p>
-                                            <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                                                <span className="flex items-center gap-1">
-                                                    <User className="h-3.5 w-3.5" />
-                                                    {talep.kullanici_adi || talep.kullanici_email || 'Anonim'}
+                                            <h3 style={{ 
+                                                margin: 0, 
+                                                fontSize: '15px', 
+                                                fontWeight: '600', 
+                                                color: '#1e293b',
+                                                whiteSpace: 'nowrap',
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis'
+                                            }}>
+                                                {talep.konu}
+                                            </h3>
+                                            <p style={{ 
+                                                margin: '6px 0 0', 
+                                                fontSize: '13px', 
+                                                color: '#64748b',
+                                                whiteSpace: 'nowrap',
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis'
+                                            }}>
+                                                {talep.mesaj}
+                                            </p>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '10px' }}>
+                                                <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#94a3b8' }}>
+                                                    👤 {talep.kullanici_adi || talep.kullanici_email || 'Anonim'}
                                                 </span>
-                                                <span className="flex items-center gap-1">
-                                                    <Clock className="h-3.5 w-3.5" />
-                                                    {formatTarih(talep.created_at)}
+                                                <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#94a3b8' }}>
+                                                    🕐 {formatTarih(talep.created_at)}
                                                 </span>
                                             </div>
                                         </div>
 
-                                        {/* Sağ: Ok */}
-                                        <ArrowRight className="h-5 w-5 text-gray-400 flex-shrink-0" />
+                                        {/* Ok */}
+                                        <span style={{ fontSize: '20px', color: '#cbd5e1' }}>→</span>
                                     </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
+                                );
+                            })}
+                        </div>
 
-                {/* Pagination */}
-                {totalPages > 1 && (
-                    <div className="px-6 py-4 border-t border-gray-200">
-                        <Pagination
-                            currentPage={currentPage}
-                            totalPages={totalPages}
-                            onPageChange={setCurrentPage}
-                        />
-                    </div>
+                        {totalPages > 1 && (
+                            <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #f1f5f9' }}>
+                                <Pagination
+                                    currentPage={currentPage}
+                                    totalPages={totalPages}
+                                    onPageChange={setCurrentPage}
+                                />
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
 
             {/* Talep Detay Modal */}
             {showDetailModal && selectedTalep && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col">
-                        {/* Header */}
-                        <div className="p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
-                            <div className="flex items-center gap-3">
-                                <span className="text-sm font-mono text-gray-500">{selectedTalep.talep_no}</span>
-                                <h3 className="text-lg font-semibold text-gray-900">{selectedTalep.konu}</h3>
+                <div style={styles.modalOverlay} onClick={() => { setShowDetailModal(false); setSelectedTalep(null); }}>
+                    <div style={{ ...styles.modal, maxWidth: '900px', display: 'flex', height: '80vh' }} onClick={e => e.stopPropagation()}>
+                        {/* Sol: Mesajlar */}
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid #e2e8f0' }}>
+                            {/* Header */}
+                            <div style={{ padding: '20px', borderBottom: '1px solid #e2e8f0' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                                    <span style={{ 
+                                        fontSize: '12px', 
+                                        fontFamily: 'monospace', 
+                                        color: '#64748b',
+                                        backgroundColor: '#f1f5f9',
+                                        padding: '2px 8px',
+                                        borderRadius: '4px'
+                                    }}>
+                                        {selectedTalep.talep_no}
+                                    </span>
+                                </div>
+                                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600', color: '#1e293b' }}>
+                                    {selectedTalep.konu}
+                                </h3>
                             </div>
-                            <button
-                                onClick={() => {
-                                    setShowDetailModal(false);
-                                    setSelectedTalep(null);
-                                    setMesajlar([]);
-                                }}
-                                className="text-gray-400 hover:text-gray-600"
-                            >
-                                <XCircle className="h-6 w-6" />
-                            </button>
+
+                            {/* Mesajlar */}
+                            <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+                                {/* İlk mesaj */}
+                                <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
+                                    <div style={{
+                                        width: '36px',
+                                        height: '36px',
+                                        borderRadius: '10px',
+                                        backgroundColor: '#f1f5f9',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontSize: '16px',
+                                        flexShrink: 0
+                                    }}>
+                                        👤
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                                            <span style={{ fontSize: '14px', fontWeight: '600', color: '#1e293b' }}>
+                                                {selectedTalep.kullanici_adi || 'Müşteri'}
+                                            </span>
+                                            <span style={{ fontSize: '12px', color: '#94a3b8' }}>
+                                                {formatTarih(selectedTalep.created_at)}
+                                            </span>
+                                        </div>
+                                        <div style={{
+                                            padding: '12px 16px',
+                                            backgroundColor: '#f1f5f9',
+                                            borderRadius: '12px',
+                                            fontSize: '14px',
+                                            color: '#1e293b',
+                                            lineHeight: '1.5'
+                                        }}>
+                                            {selectedTalep.mesaj}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Diğer mesajlar */}
+                                {mesajlar.map((mesaj) => (
+                                    <div 
+                                        key={mesaj.id} 
+                                        style={{ 
+                                            display: 'flex', 
+                                            gap: '12px', 
+                                            marginBottom: '16px',
+                                            flexDirection: mesaj.gonderen_rol === 'admin' ? 'row-reverse' : 'row'
+                                        }}
+                                    >
+                                        <div style={{
+                                            width: '36px',
+                                            height: '36px',
+                                            borderRadius: '10px',
+                                            backgroundColor: mesaj.gonderen_rol === 'admin' ? '#ede9fe' : '#f1f5f9',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: '16px',
+                                            flexShrink: 0
+                                        }}>
+                                            {mesaj.gonderen_rol === 'admin' ? '🎧' : '👤'}
+                                        </div>
+                                        <div style={{ 
+                                            flex: 1,
+                                            textAlign: mesaj.gonderen_rol === 'admin' ? 'right' : 'left'
+                                        }}>
+                                            <div style={{ 
+                                                display: 'flex', 
+                                                alignItems: 'center', 
+                                                gap: '8px', 
+                                                marginBottom: '6px',
+                                                justifyContent: mesaj.gonderen_rol === 'admin' ? 'flex-end' : 'flex-start'
+                                            }}>
+                                                <span style={{ fontSize: '14px', fontWeight: '600', color: '#1e293b' }}>
+                                                    {mesaj.gonderen_adi || (mesaj.gonderen_rol === 'admin' ? 'Destek Ekibi' : 'Müşteri')}
+                                                </span>
+                                                <span style={{ fontSize: '12px', color: '#94a3b8' }}>
+                                                    {formatTarih(mesaj.created_at)}
+                                                </span>
+                                            </div>
+                                            <div style={{
+                                                display: 'inline-block',
+                                                padding: '12px 16px',
+                                                backgroundColor: mesaj.gonderen_rol === 'admin' ? '#ede9fe' : '#f1f5f9',
+                                                color: mesaj.gonderen_rol === 'admin' ? '#6d28d9' : '#1e293b',
+                                                borderRadius: '12px',
+                                                fontSize: '14px',
+                                                lineHeight: '1.5',
+                                                maxWidth: '80%',
+                                                textAlign: 'left'
+                                            }}>
+                                                {mesaj.mesaj}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Mesaj Gönderme */}
+                            <div style={{ padding: '16px', borderTop: '1px solid #e2e8f0' }}>
+                                <div style={{ display: 'flex', gap: '12px' }}>
+                                    <div style={{ flex: 1, position: 'relative' }}>
+                                        <textarea
+                                            value={yeniMesaj}
+                                            onChange={(e) => setYeniMesaj(e.target.value)}
+                                            placeholder="Mesajınızı yazın..."
+                                            style={{
+                                                width: '100%',
+                                                padding: '12px',
+                                                border: '2px solid #e2e8f0',
+                                                borderRadius: '12px',
+                                                fontSize: '14px',
+                                                resize: 'none',
+                                                minHeight: '80px',
+                                                outline: 'none'
+                                            }}
+                                        />
+                                        <button
+                                            onClick={() => setShowHazirCevaplar(!showHazirCevaplar)}
+                                            style={{
+                                                position: 'absolute',
+                                                right: '12px',
+                                                bottom: '12px',
+                                                background: 'none',
+                                                border: 'none',
+                                                fontSize: '18px',
+                                                cursor: 'pointer',
+                                                padding: '4px'
+                                            }}
+                                            title="Hazır cevaplar"
+                                        >
+                                            📝
+                                        </button>
+
+                                        {/* Hazır Cevaplar */}
+                                        {showHazirCevaplar && (
+                                            <div style={{
+                                                position: 'absolute',
+                                                bottom: '100%',
+                                                right: 0,
+                                                marginBottom: '8px',
+                                                width: '300px',
+                                                backgroundColor: 'white',
+                                                border: '1px solid #e2e8f0',
+                                                borderRadius: '12px',
+                                                boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
+                                                maxHeight: '200px',
+                                                overflowY: 'auto'
+                                            }}>
+                                                <div style={{ padding: '12px', borderBottom: '1px solid #e2e8f0' }}>
+                                                    <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Hazır Cevaplar</span>
+                                                </div>
+                                                {hazirCevaplar.map(cevap => (
+                                                    <button
+                                                        key={cevap.id}
+                                                        onClick={() => applyHazirCevap(cevap)}
+                                                        style={{
+                                                            width: '100%',
+                                                            textAlign: 'left',
+                                                            padding: '12px',
+                                                            border: 'none',
+                                                            borderBottom: '1px solid #f1f5f9',
+                                                            backgroundColor: 'transparent',
+                                                            cursor: 'pointer'
+                                                        }}
+                                                    >
+                                                        <p style={{ margin: 0, fontSize: '13px', fontWeight: '600', color: '#1e293b' }}>{cevap.baslik}</p>
+                                                        <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                            {cevap.icerik}
+                                                        </p>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <button
+                                        onClick={sendMessage}
+                                        disabled={!yeniMesaj.trim() || sendingMessage}
+                                        style={{
+                                            width: '48px',
+                                            height: '48px',
+                                            backgroundColor: yeniMesaj.trim() ? '#8b5cf6' : '#e2e8f0',
+                                            color: 'white',
+                                            border: 'none',
+                                            borderRadius: '12px',
+                                            fontSize: '18px',
+                                            cursor: yeniMesaj.trim() ? 'pointer' : 'not-allowed',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            alignSelf: 'flex-end'
+                                        }}
+                                    >
+                                        {sendingMessage ? '⏳' : '📤'}
+                                    </button>
+                                </div>
+                            </div>
                         </div>
 
-                        <div className="flex flex-1 overflow-hidden">
-                            {/* Sol: Mesajlar */}
-                            <div className="flex-1 flex flex-col border-r border-gray-200">
-                                {/* Mesaj Listesi */}
-                                <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                                    {/* İlk mesaj (talep) */}
-                                    <div className="flex gap-3">
-                                        <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
-                                            <User className="h-4 w-4 text-gray-600" />
-                                        </div>
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <span className="font-medium text-gray-900">
-                                                    {selectedTalep.kullanici_adi || 'Müşteri'}
-                                                </span>
-                                                <span className="text-xs text-gray-500">
-                                                    {formatTarih(selectedTalep.created_at)}
-                                                </span>
-                                            </div>
-                                            <div className="bg-gray-100 rounded-lg p-3">
-                                                <p className="text-gray-800">{selectedTalep.mesaj}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Diğer mesajlar */}
-                                    {mesajlar.map((mesaj) => (
-                                        <div 
-                                            key={mesaj.id} 
-                                            className={`flex gap-3 ${mesaj.gonderen_rol === 'admin' ? 'flex-row-reverse' : ''}`}
-                                        >
-                                            <div className={`h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                                                mesaj.gonderen_rol === 'admin' ? 'bg-purple-100' : 'bg-gray-200'
-                                            }`}>
-                                                {mesaj.gonderen_rol === 'admin' ? (
-                                                    <Headphones className="h-4 w-4 text-purple-600" />
-                                                ) : (
-                                                    <User className="h-4 w-4 text-gray-600" />
-                                                )}
-                                            </div>
-                                            <div className={`flex-1 ${mesaj.gonderen_rol === 'admin' ? 'text-right' : ''}`}>
-                                                <div className={`flex items-center gap-2 mb-1 ${mesaj.gonderen_rol === 'admin' ? 'justify-end' : ''}`}>
-                                                    <span className="font-medium text-gray-900">
-                                                        {mesaj.gonderen_adi || (mesaj.gonderen_rol === 'admin' ? 'Destek Ekibi' : 'Müşteri')}
-                                                    </span>
-                                                    <span className="text-xs text-gray-500">
-                                                        {formatTarih(mesaj.created_at)}
-                                                    </span>
-                                                </div>
-                                                <div className={`inline-block rounded-lg p-3 max-w-[80%] ${
-                                                    mesaj.gonderen_rol === 'admin' 
-                                                        ? 'bg-purple-100 text-purple-900' 
-                                                        : 'bg-gray-100 text-gray-800'
-                                                }`}>
-                                                    <p>{mesaj.mesaj}</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-
-                                {/* Mesaj Gönderme */}
-                                <div className="p-4 border-t border-gray-200 flex-shrink-0">
-                                    <div className="flex items-end gap-2">
-                                        <div className="flex-1 relative">
-                                            <textarea
-                                                value={yeniMesaj}
-                                                onChange={(e) => setYeniMesaj(e.target.value)}
-                                                placeholder="Mesajınızı yazın..."
-                                                rows={3}
-                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
-                                            />
-                                            <button
-                                                onClick={() => setShowHazirCevaplar(!showHazirCevaplar)}
-                                                className="absolute right-2 bottom-2 text-gray-400 hover:text-gray-600"
-                                                title="Hazır cevaplar"
-                                            >
-                                                <FileText className="h-5 w-5" />
-                                            </button>
-
-                                            {/* Hazır Cevaplar Dropdown */}
-                                            {showHazirCevaplar && (
-                                                <div className="absolute bottom-full right-0 mb-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                                                    <div className="p-2 border-b border-gray-200">
-                                                        <span className="text-sm font-medium text-gray-700">Hazır Cevaplar</span>
-                                                    </div>
-                                                    {hazirCevaplar.map(cevap => (
-                                                        <button
-                                                            key={cevap.id}
-                                                            onClick={() => applyHazirCevap(cevap)}
-                                                            className="w-full text-left p-3 hover:bg-gray-50 border-b border-gray-100 last:border-0"
-                                                        >
-                                                            <p className="font-medium text-sm text-gray-900">{cevap.baslik}</p>
-                                                            <p className="text-xs text-gray-500 truncate">{cevap.icerik}</p>
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                        <button
-                                            onClick={sendMessage}
-                                            disabled={!yeniMesaj.trim() || sendingMessage}
-                                            className="p-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                        >
-                                            {sendingMessage ? (
-                                                <RefreshCw className="h-5 w-5 animate-spin" />
-                                            ) : (
-                                                <Send className="h-5 w-5" />
-                                            )}
-                                        </button>
-                                    </div>
-                                </div>
+                        {/* Sağ: Detaylar */}
+                        <div style={{ width: '280px', overflowY: 'auto', padding: '20px', flexShrink: 0 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                                <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '600', color: '#64748b' }}>Talep Bilgileri</h4>
+                                <button
+                                    onClick={() => { setShowDetailModal(false); setSelectedTalep(null); }}
+                                    style={{
+                                        width: '28px',
+                                        height: '28px',
+                                        border: 'none',
+                                        backgroundColor: '#f1f5f9',
+                                        borderRadius: '8px',
+                                        cursor: 'pointer',
+                                        fontSize: '14px'
+                                    }}
+                                >
+                                    ✕
+                                </button>
                             </div>
 
-                            {/* Sağ: Detaylar */}
-                            <div className="w-72 p-4 overflow-y-auto flex-shrink-0">
-                                <h4 className="font-medium text-gray-900 mb-4">Talep Bilgileri</h4>
-                                
-                                <div className="space-y-4">
-                                    {/* Durum Değiştir */}
-                                    <div>
-                                        <label className="block text-sm text-gray-600 mb-1">Durum</label>
-                                        <select
-                                            value={selectedTalep.durum}
-                                            onChange={(e) => updateTalepDurum(selectedTalep.id, e.target.value)}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                                        >
-                                            {durumlar.map(d => (
-                                                <option key={d.value} value={d.value}>{d.label}</option>
-                                            ))}
-                                        </select>
-                                    </div>
+                            {/* Durum Değiştir */}
+                            <div style={{ marginBottom: '20px' }}>
+                                <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#64748b', marginBottom: '8px' }}>
+                                    Durum
+                                </label>
+                                <select
+                                    value={selectedTalep.durum}
+                                    onChange={(e) => updateTalepDurum(selectedTalep.id, e.target.value)}
+                                    style={{
+                                        width: '100%',
+                                        padding: '10px 12px',
+                                        border: '2px solid #e2e8f0',
+                                        borderRadius: '10px',
+                                        fontSize: '14px',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    {durumlar.map(d => (
+                                        <option key={d.value} value={d.value}>{d.icon} {d.label}</option>
+                                    ))}
+                                </select>
+                            </div>
 
-                                    {/* Kategori */}
-                                    <div>
-                                        <label className="block text-sm text-gray-600 mb-1">Kategori</label>
-                                        <p className="font-medium text-gray-900">
-                                            {getKategoriInfo(selectedTalep.kategori).label}
-                                        </p>
-                                    </div>
-
-                                    {/* Öncelik */}
-                                    <div>
-                                        <label className="block text-sm text-gray-600 mb-1">Öncelik</label>
-                                        <p className="font-medium text-gray-900">
-                                            {getOncelikInfo(selectedTalep.oncelik).label}
-                                        </p>
-                                    </div>
-
-                                    <hr />
-
-                                    {/* Müşteri Bilgileri */}
-                                    <div>
-                                        <label className="block text-sm text-gray-600 mb-2">Müşteri Bilgileri</label>
-                                        <div className="space-y-2">
-                                            {selectedTalep.kullanici_adi && (
-                                                <div className="flex items-center gap-2 text-sm">
-                                                    <User className="h-4 w-4 text-gray-400" />
-                                                    <span>{selectedTalep.kullanici_adi}</span>
-                                                </div>
-                                            )}
-                                            {selectedTalep.kullanici_email && (
-                                                <div className="flex items-center gap-2 text-sm">
-                                                    <Mail className="h-4 w-4 text-gray-400" />
-                                                    <a href={`mailto:${selectedTalep.kullanici_email}`} className="text-blue-600 hover:underline">
-                                                        {selectedTalep.kullanici_email}
-                                                    </a>
-                                                </div>
-                                            )}
-                                            {selectedTalep.kullanici_telefon && (
-                                                <div className="flex items-center gap-2 text-sm">
-                                                    <Phone className="h-4 w-4 text-gray-400" />
-                                                    <a href={`tel:${selectedTalep.kullanici_telefon}`} className="text-blue-600 hover:underline">
-                                                        {selectedTalep.kullanici_telefon}
-                                                    </a>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    <hr />
-
-                                    {/* Tarihler */}
-                                    <div>
-                                        <label className="block text-sm text-gray-600 mb-1">Oluşturulma</label>
-                                        <p className="text-sm text-gray-900">{formatTarih(selectedTalep.created_at)}</p>
-                                    </div>
-
-                                    {selectedTalep.cozum_tarihi && (
-                                        <div>
-                                            <label className="block text-sm text-gray-600 mb-1">Çözüm Tarihi</label>
-                                            <p className="text-sm text-gray-900">{formatTarih(selectedTalep.cozum_tarihi)}</p>
-                                        </div>
-                                    )}
-
-                                    {/* Hızlı İşlemler */}
-                                    <div className="pt-4 space-y-2">
-                                        {selectedTalep.durum !== 'cozuldu' && (
-                                            <button
-                                                onClick={() => updateTalepDurum(selectedTalep.id, 'cozuldu')}
-                                                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                                            >
-                                                <CheckCircle className="h-4 w-4" />
-                                                Çözüldü Olarak İşaretle
-                                            </button>
-                                        )}
-                                        {selectedTalep.durum !== 'kapali' && (
-                                            <button
-                                                onClick={() => updateTalepDurum(selectedTalep.id, 'kapali')}
-                                                className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                                            >
-                                                <XCircle className="h-4 w-4" />
-                                                Talebi Kapat
-                                            </button>
-                                        )}
-                                    </div>
+                            {/* Bilgiler */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                <div>
+                                    <span style={{ fontSize: '12px', color: '#94a3b8' }}>Kategori</span>
+                                    <p style={{ margin: '4px 0 0', fontSize: '14px', fontWeight: '500', color: '#1e293b' }}>
+                                        {getKategoriInfo(selectedTalep.kategori).icon} {getKategoriInfo(selectedTalep.kategori).label}
+                                    </p>
                                 </div>
+                                <div>
+                                    <span style={{ fontSize: '12px', color: '#94a3b8' }}>Öncelik</span>
+                                    <p style={{ margin: '4px 0 0', fontSize: '14px', fontWeight: '500', color: getOncelikInfo(selectedTalep.oncelik).color }}>
+                                        {getOncelikInfo(selectedTalep.oncelik).label}
+                                    </p>
+                                </div>
+
+                                <hr style={{ border: 'none', borderTop: '1px solid #e2e8f0', margin: '8px 0' }} />
+
+                                <div>
+                                    <span style={{ fontSize: '12px', color: '#94a3b8' }}>Müşteri</span>
+                                    {selectedTalep.kullanici_adi && (
+                                        <p style={{ margin: '4px 0 0', fontSize: '14px', color: '#1e293b' }}>
+                                            👤 {selectedTalep.kullanici_adi}
+                                        </p>
+                                    )}
+                                    {selectedTalep.kullanici_email && (
+                                        <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#3b82f6' }}>
+                                            📧 {selectedTalep.kullanici_email}
+                                        </p>
+                                    )}
+                                    {selectedTalep.kullanici_telefon && (
+                                        <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#3b82f6' }}>
+                                            📞 {selectedTalep.kullanici_telefon}
+                                        </p>
+                                    )}
+                                </div>
+
+                                <hr style={{ border: 'none', borderTop: '1px solid #e2e8f0', margin: '8px 0' }} />
+
+                                <div>
+                                    <span style={{ fontSize: '12px', color: '#94a3b8' }}>Oluşturulma</span>
+                                    <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#1e293b' }}>
+                                        {formatTarih(selectedTalep.created_at)}
+                                    </p>
+                                </div>
+
+                                {selectedTalep.cozum_tarihi && (
+                                    <div>
+                                        <span style={{ fontSize: '12px', color: '#94a3b8' }}>Çözüm Tarihi</span>
+                                        <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#10b981' }}>
+                                            {formatTarih(selectedTalep.cozum_tarihi)}
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Hızlı İşlemler */}
+                            <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                {selectedTalep.durum !== 'cozuldu' && (
+                                    <button
+                                        onClick={() => updateTalepDurum(selectedTalep.id, 'cozuldu')}
+                                        style={{
+                                            width: '100%',
+                                            padding: '12px',
+                                            backgroundColor: '#10b981',
+                                            color: 'white',
+                                            border: 'none',
+                                            borderRadius: '10px',
+                                            fontSize: '14px',
+                                            fontWeight: '600',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        ✅ Çözüldü Olarak İşaretle
+                                    </button>
+                                )}
+                                {selectedTalep.durum !== 'kapali' && (
+                                    <button
+                                        onClick={() => updateTalepDurum(selectedTalep.id, 'kapali')}
+                                        style={{
+                                            width: '100%',
+                                            padding: '12px',
+                                            backgroundColor: '#f1f5f9',
+                                            color: '#64748b',
+                                            border: 'none',
+                                            borderRadius: '10px',
+                                            fontSize: '14px',
+                                            fontWeight: '600',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        🔒 Talebi Kapat
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -780,6 +929,57 @@ const DestekTalepleri = () => {
             )}
         </div>
     );
+};
+
+// Stiller
+const styles = {
+    card: {
+        backgroundColor: 'white',
+        borderRadius: '16px',
+        padding: '24px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+        border: '1px solid #e2e8f0'
+    },
+    button: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        padding: '10px 20px',
+        borderRadius: '10px',
+        border: 'none',
+        fontSize: '14px',
+        fontWeight: '500',
+        cursor: 'pointer',
+        transition: 'all 0.2s'
+    },
+    input: {
+        width: '100%',
+        padding: '10px 16px',
+        border: '2px solid #e2e8f0',
+        borderRadius: '10px',
+        fontSize: '14px',
+        outline: 'none'
+    },
+    modalOverlay: {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 9999,
+        padding: '20px'
+    },
+    modal: {
+        backgroundColor: 'white',
+        borderRadius: '16px',
+        width: '100%',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+        overflow: 'hidden'
+    }
 };
 
 export default DestekTalepleri;

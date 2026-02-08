@@ -2,33 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../../services/supabase';
 import LoadingSpinner from './common/LoadingSpinner';
-import Modal from './common/Modal';
-import { 
-    Megaphone, 
-    Plus, 
-    Search, 
-    Edit, 
-    Trash2, 
-    Eye,
-    EyeOff,
-    Pin,
-    Calendar,
-    Users,
-    Store,
-    MapPin,
-    AlertTriangle,
-    Info,
-    Gift,
-    Wrench,
-    RefreshCw,
-    Image,
-    Save,
-    X,
-    ChevronDown,
-    Bell,
-    CheckCircle,
-    Clock
-} from 'lucide-react';
+import { useToast } from './common/Toast';
+import Pagination from './common/Pagination';
 
 const DuyuruYonetimi = () => {
     const [duyurular, setDuyurular] = useState([]);
@@ -36,6 +11,11 @@ const DuyuruYonetimi = () => {
     const [showModal, setShowModal] = useState(false);
     const [editingDuyuru, setEditingDuyuru] = useState(null);
     const [bolgeler, setBolgeler] = useState([]);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const toast = useToast();
+    const itemsPerPage = 10;
+    
     const [formData, setFormData] = useState({
         baslik: '',
         icerik: '',
@@ -57,32 +37,32 @@ const DuyuruYonetimi = () => {
 
     // Duyuru tipleri
     const duyuruTipleri = [
-        { value: 'bilgi', label: 'Bilgi', icon: Info, color: 'blue' },
-        { value: 'uyari', label: 'Uyarı', icon: AlertTriangle, color: 'yellow' },
-        { value: 'kampanya', label: 'Kampanya', icon: Gift, color: 'purple' },
-        { value: 'bakim', label: 'Bakım', icon: Wrench, color: 'orange' },
-        { value: 'guncelleme', label: 'Güncelleme', icon: RefreshCw, color: 'green' }
+        { value: 'bilgi', label: 'Bilgi', icon: 'ℹ️', color: '#3b82f6' },
+        { value: 'uyari', label: 'Uyarı', icon: '⚠️', color: '#f59e0b' },
+        { value: 'kampanya', label: 'Kampanya', icon: '🎁', color: '#8b5cf6' },
+        { value: 'bakim', label: 'Bakım', icon: '🔧', color: '#f97316' },
+        { value: 'guncelleme', label: 'Güncelleme', icon: '🔄', color: '#10b981' }
     ];
 
     // Hedef kitle seçenekleri
     const hedefKitleler = [
-        { value: 'hepsi', label: 'Herkes', icon: Users },
-        { value: 'musteriler', label: 'Sadece Müşteriler', icon: Users },
-        { value: 'restoranlar', label: 'Sadece Restoranlar', icon: Store },
-        { value: 'belirli_bolge', label: 'Belirli Bölge', icon: MapPin }
+        { value: 'hepsi', label: 'Herkes', icon: '👥' },
+        { value: 'musteriler', label: 'Sadece Müşteriler', icon: '🛍️' },
+        { value: 'restoranlar', label: 'Sadece Restoranlar', icon: '🏪' },
+        { value: 'belirli_bolge', label: 'Belirli Bölge', icon: '📍' }
     ];
 
     useEffect(() => {
         fetchDuyurular();
         fetchBolgeler();
-    }, [searchTerm, filterTip]);
+    }, [searchTerm, filterTip, currentPage]);
 
     const fetchDuyurular = async () => {
         try {
             setLoading(true);
             let query = supabase
                 .from('duyurular')
-                .select('*')
+                .select('*', { count: 'exact' })
                 .order('sabitle', { ascending: false })
                 .order('created_at', { ascending: false });
 
@@ -93,21 +73,34 @@ const DuyuruYonetimi = () => {
                 query = query.eq('tip', filterTip);
             }
 
-            const { data, error } = await query;
+            const { data, error, count } = await query
+                .range((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage - 1);
+            
             if (error) throw error;
 
             setDuyurular(data || []);
+            setTotalPages(Math.ceil((count || 0) / itemsPerPage));
 
             // İstatistikler
-            const aktifSayisi = data?.filter(d => d.aktif).length || 0;
-            const sabitSayisi = data?.filter(d => d.sabitle).length || 0;
+            let statsQuery = supabase.from('duyurular').select('*');
+            if (searchTerm) {
+                statsQuery = statsQuery.or(`baslik.ilike.%${searchTerm}%,icerik.ilike.%${searchTerm}%`);
+            }
+            if (filterTip) {
+                statsQuery = statsQuery.eq('tip', filterTip);
+            }
+            const { data: allData } = await statsQuery;
+
+            const aktifSayisi = allData?.filter(d => d.aktif).length || 0;
+            const sabitSayisi = allData?.filter(d => d.sabitle).length || 0;
             setStats({
-                toplam: data?.length || 0,
+                toplam: allData?.length || 0,
                 aktif: aktifSayisi,
                 sabitlenmis: sabitSayisi
             });
         } catch (error) {
             console.error('Duyurular yüklenirken hata:', error);
+            toast.error('Duyurular yüklenirken hata oluştu');
         } finally {
             setLoading(false);
         }
@@ -122,6 +115,7 @@ const DuyuruYonetimi = () => {
             setBolgeler(data || []);
         } catch (error) {
             console.error('Bölgeler yüklenirken hata:', error);
+            toast.error('Bölgeler yüklenirken hata oluştu');
         }
     };
 
@@ -166,7 +160,7 @@ const DuyuruYonetimi = () => {
     // Kaydet
     const handleSave = async () => {
         if (!formData.baslik.trim() || !formData.icerik.trim()) {
-            alert('Başlık ve içerik zorunludur!');
+            toast.error('Başlık ve içerik zorunludur!');
             return;
         }
 
@@ -195,18 +189,21 @@ const DuyuruYonetimi = () => {
                     .update(duyuruData)
                     .eq('id', editingDuyuru.id);
                 if (error) throw error;
+                toast.success('Duyuru güncellendi');
             } else {
                 const { error } = await supabase
                     .from('duyurular')
                     .insert([duyuruData]);
                 if (error) throw error;
+                toast.success('Duyuru oluşturuldu');
             }
 
             setShowModal(false);
+            setCurrentPage(1);
             fetchDuyurular();
         } catch (error) {
             console.error('Kaydetme hatası:', error);
-            alert('Kaydetme sırasında hata oluştu!');
+            toast.error('Kaydetme sırasında hata oluştu!');
         } finally {
             setSaving(false);
         }
@@ -222,9 +219,11 @@ const DuyuruYonetimi = () => {
                 .delete()
                 .eq('id', id);
             if (error) throw error;
+            toast.success('Duyuru silindi');
             fetchDuyurular();
         } catch (error) {
             console.error('Silme hatası:', error);
+            toast.error('Silme sırasında hata oluştu');
         }
     };
 
@@ -236,9 +235,11 @@ const DuyuruYonetimi = () => {
                 .update({ aktif: !duyuru.aktif, updated_at: new Date().toISOString() })
                 .eq('id', duyuru.id);
             if (error) throw error;
+            toast.success(duyuru.aktif ? 'Duyuru pasif yapıldı' : 'Duyuru aktif yapıldı');
             fetchDuyurular();
         } catch (error) {
             console.error('Durum değiştirme hatası:', error);
+            toast.error('Durum değiştirilemedi');
         }
     };
 
@@ -250,9 +251,11 @@ const DuyuruYonetimi = () => {
                 .update({ sabitle: !duyuru.sabitle, updated_at: new Date().toISOString() })
                 .eq('id', duyuru.id);
             if (error) throw error;
+            toast.success(duyuru.sabitle ? 'Sabitleme kaldırıldı' : 'Duyuru sabitlendi');
             fetchDuyurular();
         } catch (error) {
             console.error('Sabitleme hatası:', error);
+            toast.error('Sabitleme işlemi başarısız');
         }
     };
 
@@ -273,348 +276,628 @@ const DuyuruYonetimi = () => {
         }).format(new Date(tarih));
     };
 
+    const StatCard = ({ icon, title, value, color, onClick }) => (
+        <div 
+            style={{ 
+                ...styles.card, 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '16px',
+                cursor: onClick ? 'pointer' : 'default'
+            }} 
+            onClick={onClick}
+        >
+            <div style={{
+                width: '48px',
+                height: '48px',
+                backgroundColor: `${color}20`,
+                borderRadius: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '24px'
+            }}>
+                {icon}
+            </div>
+            <div>
+                <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>{title}</p>
+                <p style={{ margin: '6px 0 0', fontSize: '24px', fontWeight: '700', color: '#1e293b' }}>
+                    {value}
+                </p>
+            </div>
+        </div>
+    );
+
     return (
-        <div className="space-y-6">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             {/* Header */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                        <div className="p-3 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl">
-                            <Megaphone className="h-6 w-6 text-white" />
+            <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px',
+                padding: '24px',
+                backgroundColor: 'white',
+                borderRadius: '16px',
+                border: '1px solid #e2e8f0',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+            }}>
+                <div style={{
+                    display: 'flex',
+                    flexDirection: window.innerWidth < 768 ? 'column' : 'row',
+                    alignItems: 'flex-start',
+                    justifyContent: 'space-between',
+                    gap: '16px'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                        <div style={{
+                            width: '56px',
+                            height: '56px',
+                            background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+                            borderRadius: '12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '28px'
+                        }}>
+                            📢
                         </div>
                         <div>
-                            <h1 className="text-2xl font-bold text-gray-800">Duyuru Yönetimi</h1>
-                            <p className="text-gray-600">Kullanıcılara duyuru ve bildirimler gönderin</p>
+                            <h1 style={{ margin: 0, fontSize: '24px', fontWeight: '700', color: '#1e293b' }}>
+                                Duyuru Yönetimi
+                            </h1>
+                            <p style={{ margin: '4px 0 0', fontSize: '14px', color: '#64748b' }}>
+                                Kullanıcılara duyuru ve bildirimler gönderin
+                            </p>
                         </div>
                     </div>
                     <button
                         onClick={() => openModal()}
-                        className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '12px 20px',
+                            backgroundColor: '#f97316',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '10px',
+                            fontSize: '14px',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            transition: 'background 0.2s'
+                        }}
+                        onMouseOver={(e) => e.target.style.backgroundColor = '#ea580c'}
+                        onMouseOut={(e) => e.target.style.backgroundColor = '#f97316'}
                     >
-                        <Plus className="h-4 w-4" />
-                        Yeni Duyuru
+                        ➕ Yeni Duyuru
                     </button>
                 </div>
             </div>
 
             {/* İstatistikler */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-blue-100 rounded-lg">
-                            <Megaphone className="h-5 w-5 text-blue-600" />
-                        </div>
-                        <div>
-                            <p className="text-sm text-gray-600">Toplam Duyuru</p>
-                            <p className="text-2xl font-bold text-gray-800">{stats.toplam}</p>
-                        </div>
-                    </div>
-                </div>
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-green-100 rounded-lg">
-                            <CheckCircle className="h-5 w-5 text-green-600" />
-                        </div>
-                        <div>
-                            <p className="text-sm text-gray-600">Aktif</p>
-                            <p className="text-2xl font-bold text-green-600">{stats.aktif}</p>
-                        </div>
-                    </div>
-                </div>
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-purple-100 rounded-lg">
-                            <Pin className="h-5 w-5 text-purple-600" />
-                        </div>
-                        <div>
-                            <p className="text-sm text-gray-600">Sabitlenmiş</p>
-                            <p className="text-2xl font-bold text-purple-600">{stats.sabitlenmis}</p>
-                        </div>
-                    </div>
-                </div>
+            <div style={{
+                display: 'grid',
+                gridTemplateColumns: window.innerWidth < 768 ? '1fr' : 'repeat(3, 1fr)',
+                gap: '16px'
+            }}>
+                <StatCard 
+                    icon="📢" 
+                    title="Toplam Duyuru" 
+                    value={stats.toplam}
+                    color="#3b82f6"
+                />
+                <StatCard 
+                    icon="✅" 
+                    title="Aktif" 
+                    value={stats.aktif}
+                    color="#10b981"
+                />
+                <StatCard 
+                    icon="📌" 
+                    title="Sabitlenmiş" 
+                    value={stats.sabitlenmis}
+                    color="#8b5cf6"
+                />
             </div>
 
             {/* Filtreler */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-                <div className="flex flex-col md:flex-row gap-4">
-                    <div className="flex-1 relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                        <input
-                            type="text"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            placeholder="Duyuru ara..."
-                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                        />
-                    </div>
-                    <select
-                        value={filterTip}
-                        onChange={(e) => setFilterTip(e.target.value)}
-                        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
-                    >
-                        <option value="">Tüm Tipler</option>
-                        {duyuruTipleri.map(tip => (
-                            <option key={tip.value} value={tip.value}>{tip.label}</option>
-                        ))}
-                    </select>
+            <div style={{
+                display: 'flex',
+                flexDirection: window.innerWidth < 768 ? 'column' : 'row',
+                gap: '16px',
+                padding: '16px',
+                backgroundColor: 'white',
+                borderRadius: '16px',
+                border: '1px solid #e2e8f0'
+            }}>
+                <div style={{ flex: 1, position: 'relative' }}>
+                    <span style={{
+                        position: 'absolute',
+                        left: '12px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        fontSize: '18px'
+                    }}>
+                        🔍
+                    </span>
+                    <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                        placeholder="Duyuru ara..."
+                        style={{
+                            width: '100%',
+                            paddingLeft: '40px',
+                            paddingRight: '16px',
+                            paddingTop: '10px',
+                            paddingBottom: '10px',
+                            border: '2px solid #e2e8f0',
+                            borderRadius: '10px',
+                            fontSize: '14px',
+                            outline: 'none'
+                        }}
+                    />
                 </div>
+                <select
+                    value={filterTip}
+                    onChange={(e) => { setFilterTip(e.target.value); setCurrentPage(1); }}
+                    style={{
+                        padding: '10px 16px',
+                        border: '2px solid #e2e8f0',
+                        borderRadius: '10px',
+                        fontSize: '14px',
+                        outline: 'none',
+                        cursor: 'pointer'
+                    }}
+                >
+                    <option value="">Tüm Tipler</option>
+                    {duyuruTipleri.map(tip => (
+                        <option key={tip.value} value={tip.value}>{tip.icon} {tip.label}</option>
+                    ))}
+                </select>
             </div>
 
             {/* Duyuru Listesi */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div style={{
+                backgroundColor: 'white',
+                borderRadius: '16px',
+                border: '1px solid #e2e8f0',
+                overflow: 'hidden',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+            }}>
                 {loading ? (
                     <LoadingSpinner message="Duyurular yükleniyor..." />
                 ) : duyurular.length === 0 ? (
-                    <div className="text-center py-12">
-                        <Megaphone className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                        <h3 className="text-lg font-medium text-gray-900">Duyuru bulunamadı</h3>
-                        <p className="text-gray-500 mt-1">Henüz duyuru eklenmemiş</p>
+                    <div style={{ textAlign: 'center', padding: '48px 24px', color: '#94a3b8' }}>
+                        <span style={{ fontSize: '64px', display: 'block', marginBottom: '16px' }}>📢</span>
+                        <h3 style={{ margin: 0, fontSize: '18px', color: '#1e293b' }}>Duyuru bulunamadı</h3>
+                        <p style={{ margin: '8px 0 0', fontSize: '14px' }}>Henüz duyuru eklenmemiş</p>
                         <button
                             onClick={() => openModal()}
-                            className="mt-4 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
+                            style={{
+                                marginTop: '16px',
+                                padding: '10px 20px',
+                                backgroundColor: '#f97316',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '10px',
+                                fontSize: '14px',
+                                fontWeight: '600',
+                                cursor: 'pointer'
+                            }}
                         >
                             İlk Duyuruyu Ekle
                         </button>
                     </div>
                 ) : (
-                    <div className="divide-y divide-gray-200">
-                        {duyurular.map((duyuru) => {
-                            const tipInfo = getTipInfo(duyuru.tip);
-                            const TipIcon = tipInfo.icon;
+                    <>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            {duyurular.map((duyuru) => {
+                                const tipInfo = getTipInfo(duyuru.tip);
 
-                            return (
-                                <div 
-                                    key={duyuru.id} 
-                                    className={`p-4 hover:bg-gray-50 transition-colors ${
-                                        duyuru.sabitle ? 'bg-purple-50 border-l-4 border-purple-500' : ''
-                                    } ${!duyuru.aktif ? 'opacity-60' : ''}`}
-                                >
-                                    <div className="flex items-start gap-4">
+                                return (
+                                    <div 
+                                        key={duyuru.id} 
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'flex-start',
+                                            gap: '16px',
+                                            padding: '16px',
+                                            borderBottom: '1px solid #f1f5f9',
+                                            backgroundColor: duyuru.sabitle ? '#f3f4f6' : 'white',
+                                            borderLeft: duyuru.sabitle ? '4px solid #8b5cf6' : 'none',
+                                            opacity: duyuru.aktif ? 1 : 0.6
+                                        }}
+                                    >
                                         {/* Resim veya İkon */}
                                         {duyuru.resim_url ? (
                                             <img 
                                                 src={duyuru.resim_url} 
                                                 alt={duyuru.baslik}
-                                                className="w-16 h-16 object-cover rounded-lg flex-shrink-0"
+                                                style={{
+                                                    width: '64px',
+                                                    height: '64px',
+                                                    objectFit: 'cover',
+                                                    borderRadius: '12px',
+                                                    flexShrink: 0
+                                                }}
                                             />
                                         ) : (
-                                            <div className={`p-3 rounded-lg bg-${tipInfo.color}-100 flex-shrink-0`}>
-                                                <TipIcon className={`h-6 w-6 text-${tipInfo.color}-600`} />
+                                            <div style={{
+                                                width: '48px',
+                                                height: '48px',
+                                                backgroundColor: `${tipInfo.color}20`,
+                                                borderRadius: '12px',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                fontSize: '24px',
+                                                flexShrink: 0
+                                            }}>
+                                                {tipInfo.icon}
                                             </div>
                                         )}
 
                                         {/* İçerik */}
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2 mb-1">
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
                                                 {duyuru.sabitle && (
-                                                    <Pin className="h-4 w-4 text-purple-600" />
+                                                    <span style={{ fontSize: '14px' }}>📌</span>
                                                 )}
-                                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-${tipInfo.color}-100 text-${tipInfo.color}-700`}>
-                                                    <TipIcon className="h-3 w-3" />
-                                                    {tipInfo.label}
+                                                <span style={{
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '4px',
+                                                    padding: '4px 12px',
+                                                    borderRadius: '6px',
+                                                    backgroundColor: `${tipInfo.color}20`,
+                                                    color: tipInfo.color,
+                                                    fontSize: '12px',
+                                                    fontWeight: '600'
+                                                }}>
+                                                    {tipInfo.icon} {tipInfo.label}
                                                 </span>
                                                 {!duyuru.aktif && (
-                                                    <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                                    <span style={{
+                                                        display: 'inline-flex',
+                                                        padding: '4px 12px',
+                                                        borderRadius: '6px',
+                                                        backgroundColor: '#f1f5f9',
+                                                        color: '#64748b',
+                                                        fontSize: '12px',
+                                                        fontWeight: '600'
+                                                    }}>
                                                         Pasif
                                                     </span>
                                                 )}
                                             </div>
-                                            <h3 className="font-medium text-gray-900">{duyuru.baslik}</h3>
-                                            <p className="text-sm text-gray-500 mt-1 line-clamp-2">
+                                            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#1e293b' }}>
+                                                {duyuru.baslik}
+                                            </h3>
+                                            <p style={{ 
+                                                margin: '6px 0 0', 
+                                                fontSize: '13px', 
+                                                color: '#64748b',
+                                                display: '-webkit-box',
+                                                WebkitLineClamp: 2,
+                                                WebkitBoxOrient: 'vertical',
+                                                overflow: 'hidden'
+                                            }}>
                                                 {duyuru.ozet || duyuru.icerik}
                                             </p>
-                                            <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                                                <span className="flex items-center gap-1">
-                                                    <Users className="h-3.5 w-3.5" />
-                                                    {hedefKitleler.find(h => h.value === duyuru.hedef_kitle)?.label || 'Herkes'}
-                                                </span>
-                                                <span className="flex items-center gap-1">
-                                                    <Clock className="h-3.5 w-3.5" />
-                                                    {formatTarih(duyuru.created_at)}
-                                                </span>
-                                                <span className="flex items-center gap-1">
-                                                    <Eye className="h-3.5 w-3.5" />
-                                                    {duyuru.goruntulenme_sayisi || 0} görüntülenme
-                                                </span>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '10px', fontSize: '12px', color: '#94a3b8' }}>
+                                                <span>👥 {hedefKitleler.find(h => h.value === duyuru.hedef_kitle)?.label || 'Herkes'}</span>
+                                                <span>🕐 {formatTarih(duyuru.created_at)}</span>
+                                                <span>👁️ {duyuru.goruntulenme_sayisi || 0} görüntülenme</span>
                                             </div>
                                         </div>
 
                                         {/* Aksiyonlar */}
-                                        <div className="flex items-center gap-2 flex-shrink-0">
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                                             <button
                                                 onClick={() => toggleSabitle(duyuru)}
-                                                className={`p-2 rounded-lg transition-colors ${
-                                                    duyuru.sabitle 
-                                                        ? 'bg-purple-100 text-purple-600' 
-                                                        : 'hover:bg-gray-100 text-gray-500'
-                                                }`}
+                                                style={{
+                                                    width: '32px',
+                                                    height: '32px',
+                                                    border: 'none',
+                                                    borderRadius: '10px',
+                                                    backgroundColor: duyuru.sabitle ? '#ede9fe' : '#f1f5f9',
+                                                    color: duyuru.sabitle ? '#8b5cf6' : '#94a3b8',
+                                                    cursor: 'pointer',
+                                                    fontSize: '16px',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center'
+                                                }}
                                                 title={duyuru.sabitle ? 'Sabitlemeyi Kaldır' : 'Sabitle'}
                                             >
-                                                <Pin className="h-4 w-4" />
+                                                📌
                                             </button>
                                             <button
                                                 onClick={() => toggleAktif(duyuru)}
-                                                className={`p-2 rounded-lg transition-colors ${
-                                                    duyuru.aktif 
-                                                        ? 'hover:bg-gray-100 text-green-600' 
-                                                        : 'hover:bg-gray-100 text-gray-400'
-                                                }`}
+                                                style={{
+                                                    width: '32px',
+                                                    height: '32px',
+                                                    border: 'none',
+                                                    borderRadius: '10px',
+                                                    backgroundColor: '#f1f5f9',
+                                                    color: duyuru.aktif ? '#10b981' : '#94a3b8',
+                                                    cursor: 'pointer',
+                                                    fontSize: '16px',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center'
+                                                }}
                                                 title={duyuru.aktif ? 'Pasif Yap' : 'Aktif Yap'}
                                             >
-                                                {duyuru.aktif ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                                                {duyuru.aktif ? '👁️' : '🚫'}
                                             </button>
                                             <button
                                                 onClick={() => openModal(duyuru)}
-                                                className="p-2 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors"
+                                                style={{
+                                                    width: '32px',
+                                                    height: '32px',
+                                                    border: 'none',
+                                                    borderRadius: '10px',
+                                                    backgroundColor: '#f1f5f9',
+                                                    color: '#3b82f6',
+                                                    cursor: 'pointer',
+                                                    fontSize: '16px',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center'
+                                                }}
                                                 title="Düzenle"
                                             >
-                                                <Edit className="h-4 w-4" />
+                                                ✏️
                                             </button>
                                             <button
                                                 onClick={() => handleDelete(duyuru.id)}
-                                                className="p-2 hover:bg-red-100 text-red-600 rounded-lg transition-colors"
+                                                style={{
+                                                    width: '32px',
+                                                    height: '32px',
+                                                    border: 'none',
+                                                    borderRadius: '10px',
+                                                    backgroundColor: '#f1f5f9',
+                                                    color: '#ef4444',
+                                                    cursor: 'pointer',
+                                                    fontSize: '16px',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center'
+                                                }}
                                                 title="Sil"
                                             >
-                                                <Trash2 className="h-4 w-4" />
+                                                🗑️
                                             </button>
                                         </div>
                                     </div>
-                                </div>
-                            );
-                        })}
-                    </div>
+                                );
+                            })}
+                        </div>
+
+                        {totalPages > 1 && (
+                            <div style={{ padding: '16px', borderTop: '1px solid #e2e8f0' }}>
+                                <Pagination
+                                    currentPage={currentPage}
+                                    totalPages={totalPages}
+                                    onPageChange={setCurrentPage}
+                                />
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
 
             {/* Duyuru Modal */}
             {showModal && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-                        <div className="p-6 border-b border-gray-200">
-                            <div className="flex items-center justify-between">
-                                <h3 className="text-lg font-semibold text-gray-900">
-                                    {editingDuyuru ? 'Duyuru Düzenle' : 'Yeni Duyuru'}
-                                </h3>
-                                <button
-                                    onClick={() => setShowModal(false)}
-                                    className="text-gray-400 hover:text-gray-600"
-                                >
-                                    <X className="h-6 w-6" />
-                                </button>
-                            </div>
+                <div style={styles.modalOverlay} onClick={() => setShowModal(false)}>
+                    <div style={{ ...styles.modal, maxWidth: '700px' }} onClick={e => e.stopPropagation()}>
+                        {/* Header */}
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '20px',
+                            borderBottom: '1px solid #e2e8f0'
+                        }}>
+                            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600', color: '#1e293b' }}>
+                                {editingDuyuru ? 'Duyuru Düzenle' : 'Yeni Duyuru'}
+                            </h3>
+                            <button
+                                onClick={() => setShowModal(false)}
+                                style={{
+                                    width: '32px',
+                                    height: '32px',
+                                    border: 'none',
+                                    backgroundColor: '#f1f5f9',
+                                    borderRadius: '8px',
+                                    cursor: 'pointer',
+                                    fontSize: '14px'
+                                }}
+                            >
+                                ✕
+                            </button>
                         </div>
 
-                        <div className="p-6 space-y-4">
+                        {/* Content */}
+                        <div style={{ padding: '20px', overflowY: 'auto', maxHeight: 'calc(80vh - 140px)' }}>
                             {/* Başlık */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Başlık <span className="text-red-500">*</span>
+                            <div style={{ marginBottom: '16px' }}>
+                                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '8px' }}>
+                                    Başlık <span style={{ color: '#ef4444' }}>*</span>
                                 </label>
                                 <input
                                     type="text"
                                     value={formData.baslik}
                                     onChange={(e) => setFormData({ ...formData, baslik: e.target.value })}
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                                     placeholder="Duyuru başlığı"
+                                    style={{
+                                        width: '100%',
+                                        padding: '10px 16px',
+                                        border: '2px solid #e2e8f0',
+                                        borderRadius: '10px',
+                                        fontSize: '14px',
+                                        outline: 'none',
+                                        boxSizing: 'border-box'
+                                    }}
                                 />
                             </div>
 
                             {/* Özet */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <div style={{ marginBottom: '16px' }}>
+                                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '8px' }}>
                                     Kısa Özet
                                 </label>
                                 <input
                                     type="text"
                                     value={formData.ozet}
                                     onChange={(e) => setFormData({ ...formData, ozet: e.target.value })}
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                                     placeholder="Listede görünecek kısa açıklama"
+                                    style={{
+                                        width: '100%',
+                                        padding: '10px 16px',
+                                        border: '2px solid #e2e8f0',
+                                        borderRadius: '10px',
+                                        fontSize: '14px',
+                                        outline: 'none',
+                                        boxSizing: 'border-box'
+                                    }}
                                 />
                             </div>
 
                             {/* İçerik */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    İçerik <span className="text-red-500">*</span>
+                            <div style={{ marginBottom: '16px' }}>
+                                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '8px' }}>
+                                    İçerik <span style={{ color: '#ef4444' }}>*</span>
                                 </label>
                                 <textarea
                                     value={formData.icerik}
                                     onChange={(e) => setFormData({ ...formData, icerik: e.target.value })}
-                                    rows={5}
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none"
                                     placeholder="Duyuru içeriği"
+                                    style={{
+                                        width: '100%',
+                                        padding: '10px 16px',
+                                        border: '2px solid #e2e8f0',
+                                        borderRadius: '10px',
+                                        fontSize: '14px',
+                                        outline: 'none',
+                                        minHeight: '100px',
+                                        resize: 'vertical',
+                                        boxSizing: 'border-box'
+                                    }}
                                 />
                             </div>
 
                             {/* Resim URL */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <div style={{ marginBottom: '16px' }}>
+                                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '8px' }}>
                                     Resim URL
                                 </label>
-                                <div className="flex gap-2">
+                                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                                     <input
                                         type="url"
                                         value={formData.resim_url}
                                         onChange={(e) => setFormData({ ...formData, resim_url: e.target.value })}
-                                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                                         placeholder="https://example.com/image.jpg"
+                                        style={{
+                                            flex: 1,
+                                            padding: '10px 16px',
+                                            border: '2px solid #e2e8f0',
+                                            borderRadius: '10px',
+                                            fontSize: '14px',
+                                            outline: 'none',
+                                            boxSizing: 'border-box'
+                                        }}
                                     />
                                     {formData.resim_url && (
                                         <img 
                                             src={formData.resim_url} 
                                             alt="Önizleme" 
-                                            className="h-10 w-10 object-cover rounded-lg border"
+                                            style={{
+                                                width: '40px',
+                                                height: '40px',
+                                                objectFit: 'cover',
+                                                borderRadius: '10px',
+                                                border: '1px solid #e2e8f0'
+                                            }}
                                             onError={(e) => e.target.style.display = 'none'}
                                         />
                                     )}
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                                 {/* Tip */}
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '8px' }}>
                                         Duyuru Tipi
                                     </label>
                                     <select
                                         value={formData.tip}
                                         onChange={(e) => setFormData({ ...formData, tip: e.target.value })}
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                                        style={{
+                                            width: '100%',
+                                            padding: '10px 16px',
+                                            border: '2px solid #e2e8f0',
+                                            borderRadius: '10px',
+                                            fontSize: '14px',
+                                            outline: 'none',
+                                            cursor: 'pointer',
+                                            boxSizing: 'border-box'
+                                        }}
                                     >
                                         {duyuruTipleri.map(tip => (
-                                            <option key={tip.value} value={tip.value}>{tip.label}</option>
+                                            <option key={tip.value} value={tip.value}>{tip.icon} {tip.label}</option>
                                         ))}
                                     </select>
                                 </div>
 
                                 {/* Hedef Kitle */}
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '8px' }}>
                                         Hedef Kitle
                                     </label>
                                     <select
                                         value={formData.hedef_kitle}
                                         onChange={(e) => setFormData({ ...formData, hedef_kitle: e.target.value })}
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                                        style={{
+                                            width: '100%',
+                                            padding: '10px 16px',
+                                            border: '2px solid #e2e8f0',
+                                            borderRadius: '10px',
+                                            fontSize: '14px',
+                                            outline: 'none',
+                                            cursor: 'pointer',
+                                            boxSizing: 'border-box'
+                                        }}
                                     >
                                         {hedefKitleler.map(kitle => (
-                                            <option key={kitle.value} value={kitle.value}>{kitle.label}</option>
+                                            <option key={kitle.value} value={kitle.value}>{kitle.icon} {kitle.label}</option>
                                         ))}
                                     </select>
                                 </div>
                             </div>
 
-                            {/* Bölge Seçimi (eğer belirli bölge seçildiyse) */}
+                            {/* Bölge Seçimi */}
                             {formData.hedef_kitle === 'belirli_bolge' && (
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <div style={{ marginBottom: '16px' }}>
+                                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '8px' }}>
                                         Bölge
                                     </label>
                                     <select
                                         value={formData.hedef_bolge_id}
                                         onChange={(e) => setFormData({ ...formData, hedef_bolge_id: e.target.value })}
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                                        style={{
+                                            width: '100%',
+                                            padding: '10px 16px',
+                                            border: '2px solid #e2e8f0',
+                                            borderRadius: '10px',
+                                            fontSize: '14px',
+                                            outline: 'none',
+                                            cursor: 'pointer',
+                                            boxSizing: 'border-box'
+                                        }}
                                     >
                                         <option value="">Bölge seçin</option>
                                         {bolgeler.map(bolge => (
@@ -624,75 +907,116 @@ const DuyuruYonetimi = () => {
                                 </div>
                             )}
 
-                            <div className="grid grid-cols-2 gap-4">
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                                 {/* Başlangıç Tarihi */}
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '8px' }}>
                                         Başlangıç Tarihi
                                     </label>
                                     <input
                                         type="datetime-local"
                                         value={formData.baslangic_tarihi}
                                         onChange={(e) => setFormData({ ...formData, baslangic_tarihi: e.target.value })}
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                                        style={{
+                                            width: '100%',
+                                            padding: '10px 16px',
+                                            border: '2px solid #e2e8f0',
+                                            borderRadius: '10px',
+                                            fontSize: '14px',
+                                            outline: 'none',
+                                            boxSizing: 'border-box'
+                                        }}
                                     />
                                 </div>
 
                                 {/* Bitiş Tarihi */}
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Bitiş Tarihi (Opsiyonel)
+                                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '8px' }}>
+                                        Bitiş Tarihi
                                     </label>
                                     <input
                                         type="datetime-local"
                                         value={formData.bitis_tarihi}
                                         onChange={(e) => setFormData({ ...formData, bitis_tarihi: e.target.value })}
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                                        style={{
+                                            width: '100%',
+                                            padding: '10px 16px',
+                                            border: '2px solid #e2e8f0',
+                                            borderRadius: '10px',
+                                            fontSize: '14px',
+                                            outline: 'none',
+                                            boxSizing: 'border-box'
+                                        }}
                                     />
                                 </div>
                             </div>
 
                             {/* Checkbox'lar */}
-                            <div className="flex items-center gap-6">
-                                <label className="flex items-center gap-2 cursor-pointer">
+                            <div style={{ display: 'flex', gap: '24px', marginBottom: '16px' }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                                     <input
                                         type="checkbox"
                                         checked={formData.aktif}
                                         onChange={(e) => setFormData({ ...formData, aktif: e.target.checked })}
-                                        className="w-4 h-4 text-orange-600 rounded focus:ring-orange-500"
+                                        style={{ cursor: 'pointer' }}
                                     />
-                                    <span className="text-sm text-gray-700">Aktif</span>
+                                    <span style={{ fontSize: '14px', color: '#475569' }}>Aktif</span>
                                 </label>
-                                <label className="flex items-center gap-2 cursor-pointer">
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                                     <input
                                         type="checkbox"
                                         checked={formData.sabitle}
                                         onChange={(e) => setFormData({ ...formData, sabitle: e.target.checked })}
-                                        className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
+                                        style={{ cursor: 'pointer' }}
                                     />
-                                    <span className="text-sm text-gray-700">Üstte Sabitle</span>
+                                    <span style={{ fontSize: '14px', color: '#475569' }}>Üstte Sabitle</span>
                                 </label>
                             </div>
                         </div>
 
-                        <div className="p-6 border-t border-gray-200 flex items-center justify-end gap-3">
+                        {/* Footer */}
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'flex-end',
+                            gap: '12px',
+                            padding: '16px 20px',
+                            borderTop: '1px solid #e2e8f0'
+                        }}>
                             <button
                                 onClick={() => setShowModal(false)}
-                                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                                style={{
+                                    padding: '10px 20px',
+                                    border: '2px solid #e2e8f0',
+                                    backgroundColor: 'white',
+                                    color: '#475569',
+                                    borderRadius: '10px',
+                                    fontSize: '14px',
+                                    fontWeight: '600',
+                                    cursor: 'pointer'
+                                }}
                             >
                                 İptal
                             </button>
                             <button
                                 onClick={handleSave}
                                 disabled={saving}
-                                className="flex items-center gap-2 px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 transition-colors"
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    padding: '10px 24px',
+                                    backgroundColor: saving ? '#cbd5e1' : '#f97316',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '10px',
+                                    fontSize: '14px',
+                                    fontWeight: '600',
+                                    cursor: saving ? 'not-allowed' : 'pointer',
+                                    opacity: saving ? 0.8 : 1
+                                }}
                             >
-                                {saving ? (
-                                    <RefreshCw className="h-4 w-4 animate-spin" />
-                                ) : (
-                                    <Save className="h-4 w-4" />
-                                )}
-                                {saving ? 'Kaydediliyor...' : 'Kaydet'}
+                                {saving ? '⏳' : '💾'} {saving ? 'Kaydediliyor...' : 'Kaydet'}
                             </button>
                         </div>
                     </div>
@@ -700,6 +1024,36 @@ const DuyuruYonetimi = () => {
             )}
         </div>
     );
+};
+
+const styles = {
+    card: {
+        backgroundColor: 'white',
+        borderRadius: '16px',
+        padding: '16px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+        border: '1px solid #e2e8f0'
+    },
+    modalOverlay: {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 9999,
+        padding: '20px'
+    },
+    modal: {
+        backgroundColor: 'white',
+        borderRadius: '16px',
+        width: '100%',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+        overflow: 'hidden'
+    }
 };
 
 export default DuyuruYonetimi;
